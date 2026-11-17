@@ -1,0 +1,30 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.*
+
+# build output
+.next/
+out/
+build/
+dist/
+coverage/
+*.tsbuildinfo
+
+# environment files (never commit real secrets)
+.env
+.env.*
+!.env.example
+
+# logs
+*.log
+npm-debug.log*
+
+# editor / OS noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# deployment
+.vercel
