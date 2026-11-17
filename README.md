@@ -60,7 +60,7 @@ Run these from inside `client/` or `server/` as noted.
 | `npm run build` | both | Production build |
 | `npm run start` | server | Run the built API from `dist/` |
 | `npm run lint` | both | ESLint |
-| `npm run typecheck` | both | `tsc --noEmit` |
+| `npm run typecheck` | both | Type-check; the client runs `next typegen` first |
 | `npm run format` | both | Format with Prettier |
 
 ## Project structure

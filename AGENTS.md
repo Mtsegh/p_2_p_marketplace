@@ -66,7 +66,7 @@ npm install            # install dependencies
 npm run dev            # start the dev server (client or server, depending on the folder)
 npm run build          # production build
 npm run lint           # eslint
-npm run typecheck      # tsc --noEmit
+npm run typecheck      # tsc --noEmit (client generates Next route types first)
 npm run format         # prettier --write .
 npm run test           # unit and integration tests (added in a later chunk)
 npm run test:e2e       # Playwright end-to-end tests (added in a later chunk)
@@ -77,7 +77,7 @@ npm run db:seed        # seed dev data (chunk 2)
 
 Local infrastructure (PostgreSQL, Redis) runs through Docker Compose from the repository root: `docker compose up -d`.
 
-Before declaring any task done, run: `lint`, `typecheck`, and `test`.
+Before declaring any task done, run `lint` and `typecheck`. The `test` suites arrive with the backend skeleton; from then on run them as well.
 
 ## Coding Conventions
 
