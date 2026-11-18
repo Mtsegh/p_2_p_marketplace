@@ -3,10 +3,10 @@
 // Lives at the repository root per AGENTS.md. The Prisma CLI is run from
 // `server/` and configured by `server/prisma.config.ts`.
 //
-// Scope: the identity slice needed by Phases 1 and 2. `Profile` (chunk 7) and
-// `PhoneOtp` (chunk 8) are added with their own migrations when those chunks
-// land. `AuthTokenType.EMAIL_CHANGE` and `UserStatus.DELETED` already exist so
-// chunks 7's change-email and delete-account flows do not need enum migrations.
+// Scope: the identity slice needed by Phases 1 and 2. `PhoneOtp` (chunk 8) is
+// added with its own migration when that chunk lands. `Profile` arrived with
+// chunk 7, which also uses the pre-existing `AuthTokenType.EMAIL_CHANGE` and
+// `UserStatus.DELETED` values.
 
 generator client {
   provider            = "prisma-client"
@@ -53,8 +53,26 @@ model User {
 
   sessions   Session[]
   authTokens AuthToken[]
+  profile    Profile?
 
   @@map("users")
+}
+
+/// Public profile data, split from `User` so a public read can never select the
+/// email or password hash by accident. One row per account, created with it.
+/// Avatar upload arrives in chunk 10; until then the UI draws initials.
+model Profile {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @unique @map("user_id") @db.Uuid
+  displayName String   @default("") @map("display_name") @db.VarChar(60)
+  bio         String   @default("") @db.VarChar(500)
+  location    String   @default("") @db.VarChar(80)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("profiles")
 }
 
 /// Refresh-token session. Stores only a hash of the opaque refresh token.

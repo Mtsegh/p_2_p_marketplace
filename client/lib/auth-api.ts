@@ -1,4 +1,4 @@
-import { ApiError, apiRequestJson, setAccessToken } from "./api";
+import { ApiError, apiRequest, apiRequestJson, setAccessToken } from "./api";
 
 export type UserRole = "USER" | "ADMIN";
 export type UserStatus = "ACTIVE" | "SUSPENDED" | "DELETED";
@@ -11,6 +11,10 @@ export interface AuthUser {
   emailVerified: boolean;
   phoneVerified: boolean;
   createdAt: string;
+  /** Public profile fields, flat on the user so one DTO serves every screen. */
+  displayName: string;
+  bio: string;
+  location: string;
 }
 
 interface AuthPayload {
@@ -139,4 +143,95 @@ export async function resetPassword(
   } finally {
     setAccessToken(null);
   }
+}
+
+/**
+ * Changes the password for the signed-in user. Every other device is signed
+ * out; this session stays valid, so the in-memory token is kept.
+ */
+export async function changePassword(input: {
+  currentPassword: string;
+  newPassword: string;
+}): Promise<void> {
+  await apiRequestJson<null>("/api/v1/auth/password/change", "POST", input);
+}
+
+/**
+ * Starts an email change. The confirmation link is sent to the new address,
+ * which is what proves the user controls it.
+ */
+export async function requestEmailChange(input: {
+  newEmail: string;
+  password: string;
+}): Promise<void> {
+  await apiRequestJson<null>("/api/v1/auth/email/change", "POST", input);
+}
+
+export interface EmailChangeResult {
+  email: string;
+  userId: string;
+}
+
+/** Completes the change from the emailed link. No session is required. */
+export async function confirmEmailChange(
+  token: string,
+): Promise<EmailChangeResult> {
+  const response = await apiRequestJson<{ data: EmailChangeResult }>(
+    "/api/v1/auth/email/change/confirm",
+    "POST",
+    { token },
+  );
+
+  return response.data;
+}
+
+/**
+ * Anonymizes the account and ends every session. The API clears the refresh
+ * cookie, and the access token is dropped here so the UI immediately becomes
+ * signed out.
+ */
+export async function deleteAccount(password: string): Promise<void> {
+  try {
+    await apiRequestJson<null>("/api/v1/auth/account", "DELETE", { password });
+  } finally {
+    setAccessToken(null);
+  }
+}
+
+export interface AccountExport {
+  exportedAt: string;
+  account: {
+    id: string;
+    email: string;
+    role: string;
+    status: string;
+    emailVerified: boolean;
+    phoneVerified: boolean;
+    createdAt: string;
+    updatedAt: string;
+  };
+  profile: {
+    displayName: string;
+    bio: string;
+    location: string;
+    createdAt: string;
+    updatedAt: string;
+  } | null;
+  sessions: {
+    id: string;
+    userAgent: string | null;
+    ip: string | null;
+    createdAt: string;
+    expiresAt: string;
+    revokedAt: string | null;
+  }[];
+}
+
+/** Everything the account owns, ready to be saved as a JSON file. */
+export async function exportAccountData(): Promise<AccountExport> {
+  const response = await apiRequest<{ data: AccountExport }>(
+    "/api/v1/auth/account/export",
+  );
+
+  return response.data;
 }

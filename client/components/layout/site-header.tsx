@@ -7,6 +7,7 @@ import { Button, ButtonLink } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/cn";
 import { useAuth } from "@/lib/auth";
+import { displayNameOf } from "@/lib/profile-display";
 import { PageContainer } from "./page-container";
 import { ThemeToggle } from "./theme-toggle";
 
@@ -64,7 +65,7 @@ function AccountNav() {
         title={user.email}
         className="hidden max-w-40 truncate text-sm text-muted hover:text-foreground sm:block"
       >
-        {user.email}
+        {displayNameOf(user)}
       </Link>
       <Button
         variant="secondary"

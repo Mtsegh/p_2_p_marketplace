@@ -173,10 +173,12 @@ is treated as token theft and the whole token family is revoked.
 | `VALIDATION_ERROR`       | 422    | Body or params failed validation; `details` names the fields                                        |
 | `INVALID_CREDENTIALS`    | 401    | Wrong password, unknown email, or deleted account (deliberately identical, and equalized in timing) |
 | `ACCOUNT_SUSPENDED`      | 403    | Password was correct but the account is suspended                                                   |
-| `EMAIL_IN_USE`           | 409    | Registration with an address that already has an account                                            |
+| `EMAIL_IN_USE`           | 409    | Registration with an address that already has an account, or an email change to one |
+| `EMAIL_UNCHANGED`        | 409    | Email change requested to the address already on the account                                        |
 | `EMAIL_ALREADY_VERIFIED` | 409    | Resending a confirmation for an address that is already confirmed                                   |
 | `EMAIL_NOT_VERIFIED`     | 403    | The action needs a confirmed address                                                                |
-| `INVALID_TOKEN`          | 400    | Email verification or password reset token is unknown, expired, or already used                     |
+| `INVALID_PASSWORD`       | 400    | The current password supplied to a settings action is wrong                                         |
+| `INVALID_TOKEN`          | 400    | Email verification, password reset, or email change token is unknown, expired, or already used      |
 | `UNAUTHENTICATED`        | 401    | Missing, malformed, or expired access token; or no refresh cookie on refresh                        |
 | `INVALID_REFRESH_TOKEN`  | 401    | Refresh cookie is unknown, revoked, or expired                                                      |
 | `FORBIDDEN`              | 403    | Authenticated but the role is not allowed                                                           |
@@ -195,6 +197,13 @@ is treated as token theft and the whole token family is revoked.
 | `POST /auth/verify-email/resend` | per user                                          | 3 per hour                            |
 | `POST /auth/password/forgot`     | per email and per IP                              | 5 per hour / 10 per hour              |
 | `POST /auth/password/reset`      | per IP                                            | 10 per 15 minutes                     |
+| `POST /auth/password/change`     | per user                                          | 5 per 15 minutes                      |
+| `POST /auth/email/change`        | per user                                          | 3 per hour                            |
+| `POST /auth/email/change/confirm`| per IP                                            | 30 per 15 minutes                     |
+| `GET /auth/account/export`       | per user                                          | 5 per hour                            |
+| `DELETE /auth/account`           | per user                                          | 3 per hour                            |
+| `PATCH /profiles/me`             | per user                                          | 30 per hour                           |
+| `GET /profiles/:userId`          | per IP                                            | 120 per 15 minutes                    |
 
 The limiter uses Redis. If Redis is unavailable the limiter fails open and logs
 a warning: a cache outage must not lock everyone out of signing in.
@@ -220,7 +229,10 @@ Body, both required:
       "status": "ACTIVE",
       "emailVerified": false,
       "phoneVerified": false,
-      "createdAt": "2026-11-18T18:26:56.325Z"
+      "createdAt": "2026-11-18T18:26:56.325Z",
+      "displayName": "",
+      "bio": "",
+      "location": ""
     },
     "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
     "expiresIn": 900
@@ -265,7 +277,10 @@ Requires `Authorization`. `200`:
       "status": "ACTIVE",
       "emailVerified": false,
       "phoneVerified": false,
-      "createdAt": "..."
+      "createdAt": "...",
+      "displayName": "Ade Balogun",
+      "bio": "Trades cameras and bike parts.",
+      "location": "Lagos"
     }
   }
 }
@@ -355,6 +370,128 @@ expires (at most 15 minutes), which is the documented cost of a stateless token.
 listing creation and proposal submission (added in those chunks). It returns
 `403 EMAIL_NOT_VERIFIED` and reads the database rather than the token, because
 the token was minted before the user clicked the link.
+
+## Profiles
+
+Public profile data lives in a separate `profiles` table, created in the same
+transaction as the account. It is split from `users` so a public read can never
+select the email address or the password hash by accident.
+
+### `GET /api/v1/profiles/:userId`
+
+Public; no session required. `200`:
+
+```json
+{
+  "data": {
+    "profile": {
+      "id": "...",
+      "displayName": "Ade Balogun",
+      "bio": "Trades cameras and bike parts.",
+      "location": "Lagos",
+      "memberSince": "2026-11-18T18:26:56.325Z",
+      "emailVerified": true,
+      "phoneVerified": false
+    }
+  }
+}
+```
+
+Missing, suspended, and deleted accounts all return `404 NOT_FOUND`, so the
+outside world cannot tell a banned member from one who never existed. A
+malformed id returns `422`. The response never contains the email address,
+role, or status.
+
+### `PATCH /api/v1/profiles/me`
+
+Requires `Authorization` and a trusted `Origin`. Body: at least one of
+
+| Field         | Rules                                                       |
+| ------------- | ----------------------------------------------------------- |
+| `displayName` | 1 to 60 characters after trimming, single line              |
+| `bio`         | 0 to 500 characters after trimming, line breaks allowed     |
+| `location`    | 0 to 80 characters after trimming, single line              |
+
+Unknown keys are rejected with `422`. On success, `200` with the complete user:
+
+```json
+{ "data": { "user": { "id": "...", "displayName": "Ade Balogun", "bio": "...", "location": "Lagos" } } }
+```
+
+Returning the user rather than just the profile lets the client replace its
+cached session in one round trip.
+
+## Account settings
+
+All endpoints below require `Authorization`. Password changes, email changes,
+and deletion also require the **current password** in the body: a borrowed
+session alone must not be able to move the account or destroy it. Browser
+requests must also carry a trusted `Origin`.
+
+### `POST /api/v1/auth/password/change`
+
+Body: `{ "currentPassword": "...", "newPassword": "..." }`. `204` on success.
+
+Every other session for the account is revoked and denylisted immediately; the
+session that made the request stays signed in. `400 INVALID_PASSWORD` when the
+current password is wrong, `422` when the new one breaks the policy.
+
+### `POST /api/v1/auth/email/change`
+
+Body: `{ "newEmail": "new@example.com", "password": "..." }`. `202` with
+`{ "data": { "status": "queued" } }`.
+
+A confirmation link is sent to the **new** address, because receiving it is the
+proof that the user controls that inbox. The link expires after one hour and
+works once. Until it is confirmed, the old address stays on the account.
+
+| Error              | Status | When                                            |
+| ------------------ | ------ | ----------------------------------------------- |
+| `INVALID_PASSWORD` | 400    | The supplied password is wrong                  |
+| `EMAIL_UNCHANGED`  | 409    | The new address is already the current one      |
+| `EMAIL_IN_USE`     | 409    | Another account already uses the new address    |
+
+### `POST /api/v1/auth/email/change/confirm`
+
+Body: `{ "token": "<token from the link>" }`. Public: the token is the
+credential, so this works on a phone that is not signed in. `200`:
+
+```json
+{ "data": { "email": "new@example.com", "userId": "..." } }
+```
+
+Confirmation marks the new address verified in the same transaction. `400
+INVALID_TOKEN` for an unknown, expired, or used token; `409 EMAIL_IN_USE` if the
+address was taken while the link was waiting.
+
+### `GET /api/v1/auth/account/export`
+
+`200` with `Content-Disposition: attachment` and a JSON document:
+
+```json
+{
+  "data": {
+    "exportedAt": "2026-11-18T20:00:00.000Z",
+    "account": { "id": "...", "email": "...", "role": "USER", "status": "ACTIVE", "emailVerified": true, "phoneVerified": false, "createdAt": "...", "updatedAt": "..." },
+    "profile": { "displayName": "...", "bio": "...", "location": "...", "createdAt": "...", "updatedAt": "..." },
+    "sessions": [{ "id": "...", "userAgent": "...", "ip": "...", "createdAt": "...", "expiresAt": "...", "revokedAt": null }]
+  }
+}
+```
+
+Password hashes, refresh-token hashes, and action tokens are deliberately
+excluded: an export is for the user's records, not a credential dump.
+
+### `DELETE /api/v1/auth/account`
+
+Body: `{ "password": "..." }`. `204` on success.
+
+The account is **anonymized, not deleted**. The row stays so future listings,
+deals, and audit records can still reference it; the email becomes
+`deleted+<id>@deleted.invalid`, the password hash becomes an unusable random
+value, the status becomes `DELETED`, the profile fields are cleared, and every
+session and action token is removed. `400 INVALID_PASSWORD` when the password is
+wrong. The response clears the refresh cookie.
 
 ### `GET /api/v1/admin/users`
 

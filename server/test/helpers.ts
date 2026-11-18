@@ -99,6 +99,7 @@ export async function createAdmin(
       passwordHash: await hashPassword(password),
       role: "ADMIN",
       emailVerifiedAt: new Date(),
+      profile: { create: {} },
     },
   });
 

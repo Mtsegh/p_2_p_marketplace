@@ -1,5 +1,4 @@
 import { env } from "../../config/env.js";
-import { AppError } from "../../lib/app-error.js";
 import { logger } from "../../lib/logger.js";
 import { sendEmail } from "../email/email.queue.js";
 import { passwordResetEmail } from "../email/templates/password-reset.js";
@@ -7,6 +6,7 @@ import {
   PASSWORD_RESET_TTL_MS,
   createActionToken,
   hashActionToken,
+  invalidActionLink,
 } from "./action-tokens.js";
 import * as repository from "./auth.repository.js";
 import { hashPassword } from "./password.js";
@@ -17,14 +17,6 @@ export function resetUrl(token: string): string {
   const base = env.CLIENT_URL.replace(/\/+$/, "");
 
   return `${base}/reset-password?token=${encodeURIComponent(token)}`;
-}
-
-function invalidLink(): AppError {
-  return new AppError(
-    "INVALID_TOKEN",
-    400,
-    "This link is invalid or has expired. Request a new one.",
-  );
 }
 
 /**
@@ -79,11 +71,11 @@ export async function resetPassword(
   );
 
   if (!record) {
-    throw invalidLink();
+    throw invalidActionLink();
   }
 
   if (record.usedAt || record.expiresAt.getTime() <= Date.now()) {
-    throw invalidLink();
+    throw invalidActionLink();
   }
 
   const passwordHash = await hashPassword(password);
@@ -94,6 +86,6 @@ export async function resetPassword(
   );
 
   if (!user) {
-    throw invalidLink();
+    throw invalidActionLink();
   }
 }

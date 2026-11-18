@@ -84,6 +84,14 @@ Target shape (details land in chunk 30):
       and the link confirms the address on `app.`.
 - [ ] "Forgot password" delivers a reset link that changes the password and
       signs out other devices.
+- [ ] A member can save a display name, bio, and location, and the public page
+      at `/users/<id>` shows them without the email address.
+- [ ] Changing the password keeps this device signed in and signs out another
+      browser.
+- [ ] Changing the email delivers a link to the new address, and confirming it
+      makes the new address the sign-in address.
+- [ ] "Download my data" saves a JSON file with no password hash or token.
+- [ ] Deleting an account signs out every device and removes the public profile.
 - [ ] Stopping the API shows the error state, and restarting it recovers with
       "Check again".
 - [ ] A pull request runs lint, typecheck, test, and build for both projects.
@@ -92,3 +100,6 @@ Target shape (details land in chunk 30):
 
 Chunk 6 adds transactional email. Staging cannot confirm Brevo delivery until
 the domain above is settled and a verified sender exists.
+
+Chunk 7 finishes the account flows. The email-change message uses the same
+Brevo sender, so it is covered by the same requirement.

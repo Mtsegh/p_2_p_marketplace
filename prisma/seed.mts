@@ -41,6 +41,7 @@ const admin = await prisma.user.upsert({
     passwordHash,
     role: "ADMIN",
     emailVerifiedAt: new Date(),
+    profile: { create: { displayName: "Administrator" } },
   },
 });
 

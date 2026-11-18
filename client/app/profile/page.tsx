@@ -13,9 +13,9 @@ export default function ProfilePage() {
         Profile
       </h1>
       <p className="mt-2 max-w-2xl text-muted">
-        Your account and public profile.
+        Your public profile, sign-in details, and account data.
       </p>
-      <div className="mt-8">
+      <div className="mt-8 max-w-3xl">
         <ProfileView />
       </div>
     </PageContainer>

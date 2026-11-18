@@ -184,6 +184,27 @@ work once. Resetting a password signs out every device. Listing creation and
 proposals require a confirmed address; the profile page has a resend button for
 the link.
 
+### Profiles and account settings
+
+Public profile data (display name, bio, location) lives in its own `profiles`
+table, created together with the account. Every member gets a public page at
+`/users/<id>` that never shows the email address; any name or bio left empty is
+replaced with neutral wording. Until avatar uploads arrive (chunk 10), the UI
+draws initials from the display name.
+
+The `/profile` page also handles the account itself:
+
+- Change password. Every other device is signed out and denylisted; the device
+  making the change stays signed in.
+- Change email. A confirmation link is sent to the **new** address, expires in
+  one hour, and works once. The old address stays usable until it is confirmed.
+- Export data. Downloads a JSON document with the account, profile, and session
+  history. Password hashes and tokens are never included.
+- Delete account. Requires the password. The account is anonymized rather than
+  removed, because later listings, deals, and audit records reference it: the
+  email, password, profile text, phone number, sessions, and tokens are cleared
+  and the status becomes `DELETED`.
+
 ### Continuous integration
 
 `.github/workflows/ci.yml` runs lint, typecheck, test, and build for both

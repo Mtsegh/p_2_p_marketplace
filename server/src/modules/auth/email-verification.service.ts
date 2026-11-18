@@ -7,6 +7,7 @@ import {
   EMAIL_VERIFICATION_TTL_MS,
   createActionToken,
   hashActionToken,
+  invalidActionLink,
 } from "./action-tokens.js";
 import * as repository from "./auth.repository.js";
 
@@ -16,14 +17,6 @@ export function verificationUrl(token: string): string {
   const base = env.CLIENT_URL.replace(/\/+$/, "");
 
   return `${base}/verify-email?token=${encodeURIComponent(token)}`;
-}
-
-function invalidLink(): AppError {
-  return new AppError(
-    "INVALID_TOKEN",
-    400,
-    "This link is invalid or has expired. Request a new one.",
-  );
 }
 
 /**
@@ -74,11 +67,11 @@ export async function verifyEmail(token: string) {
   );
 
   if (!record) {
-    throw invalidLink();
+    throw invalidActionLink();
   }
 
   if (record.usedAt || record.expiresAt.getTime() <= Date.now()) {
-    throw invalidLink();
+    throw invalidActionLink();
   }
 
   const user = await repository.consumeAuthTokenAndVerifyEmail(
@@ -88,7 +81,7 @@ export async function verifyEmail(token: string) {
 
   if (!user) {
     // Another request consumed it first.
-    throw invalidLink();
+    throw invalidActionLink();
   }
 
   return user;

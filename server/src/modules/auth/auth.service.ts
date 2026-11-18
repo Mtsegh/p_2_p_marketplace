@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { Prisma, type User } from "../../generated/prisma/client.js";
+import { Prisma } from "../../generated/prisma/client.js";
 import { AppError } from "../../lib/app-error.js";
 import * as repository from "./auth.repository.js";
-import type { SessionDto } from "./auth.dto.js";
+import type { SessionDto, UserWithProfile } from "./auth.dto.js";
 import { issueVerificationEmail } from "./email-verification.service.js";
 import { absorbLoginTiming, hashPassword, verifyPassword } from "./password.js";
 import { denySession } from "./token-denylist.js";
@@ -28,7 +28,7 @@ export interface RequestContext {
 }
 
 export interface AuthResult {
-  user: User;
+  user: UserWithProfile;
   accessToken: string;
   refreshToken: string;
   expiresIn: number;
@@ -59,7 +59,7 @@ function isUniqueViolation(error: unknown): boolean {
 }
 
 async function issueSession(
-  user: User,
+  user: UserWithProfile,
   context: RequestContext,
 ): Promise<AuthResult> {
   const { token, tokenHash } = createRefreshToken();
@@ -245,7 +245,9 @@ export async function logout(refreshToken: string | undefined): Promise<void> {
   await denySession(session.id);
 }
 
-export async function getAuthenticatedUser(userId: string): Promise<User> {
+export async function getAuthenticatedUser(
+  userId: string,
+): Promise<UserWithProfile> {
   const user = await repository.findUserById(userId);
 
   if (!user || user.status !== "ACTIVE") {

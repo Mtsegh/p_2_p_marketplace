@@ -1,7 +1,6 @@
-import { Router, type RequestHandler } from "express";
-import { env } from "../../config/env.js";
-import { AppError } from "../../lib/app-error.js";
+import { Router } from "express";
 import { emailKey, ipKey, rateLimit, userKey } from "../../lib/rate-limit.js";
+import { requireTrustedOrigin } from "../../middleware/trusted-origin.js";
 import * as controller from "./auth.controller.js";
 import { requireAuth } from "./auth.middleware.js";
 
@@ -9,28 +8,6 @@ export const authRouter = Router();
 
 const FIFTEEN_MINUTES = 15 * 60;
 const ONE_HOUR = 60 * 60;
-
-/**
- * Browser writes must originate from the configured client. Combined with the
- * `SameSite=Lax` refresh cookie this closes cross-site form posts without a
- * CSRF token dance. Non-browser clients (curl, tests) send no Origin.
- */
-const requireTrustedOrigin: RequestHandler = (req, _res, next) => {
-  const origin = req.get("origin");
-
-  if (origin && origin !== env.CLIENT_URL) {
-    next(
-      new AppError(
-        "ORIGIN_NOT_ALLOWED",
-        403,
-        "Requests must come from the marketplace client",
-      ),
-    );
-    return;
-  }
-
-  next();
-};
 
 // Five signups per hour per IP: registration reports EMAIL_IN_USE, so it is
 // also the endpoint that could be used to probe for accounts.
@@ -103,6 +80,42 @@ const resetPasswordLimit = rateLimit({
   key: ipKey,
 });
 
+// Authenticated and password-gated, so a per-user bucket is enough.
+const changePasswordLimit = rateLimit({
+  name: "password-change-user",
+  limit: 5,
+  windowSeconds: FIFTEEN_MINUTES,
+  key: userKey,
+});
+
+const changeEmailLimit = rateLimit({
+  name: "email-change-user",
+  limit: 3,
+  windowSeconds: ONE_HOUR,
+  key: userKey,
+});
+
+const confirmEmailChangeLimit = rateLimit({
+  name: "email-change-confirm-ip",
+  limit: 30,
+  windowSeconds: FIFTEEN_MINUTES,
+  key: ipKey,
+});
+
+const deleteAccountLimit = rateLimit({
+  name: "delete-account-user",
+  limit: 3,
+  windowSeconds: ONE_HOUR,
+  key: userKey,
+});
+
+const exportAccountLimit = rateLimit({
+  name: "export-account-user",
+  limit: 5,
+  windowSeconds: ONE_HOUR,
+  key: userKey,
+});
+
 authRouter.post(
   "/register",
   requireTrustedOrigin,
@@ -158,4 +171,40 @@ authRouter.post(
   requireTrustedOrigin,
   resetPasswordLimit,
   controller.resetPassword,
+);
+
+authRouter.post(
+  "/password/change",
+  requireTrustedOrigin,
+  requireAuth,
+  changePasswordLimit,
+  controller.changePassword,
+);
+
+authRouter.post(
+  "/email/change",
+  requireTrustedOrigin,
+  requireAuth,
+  changeEmailLimit,
+  controller.changeEmail,
+);
+authRouter.post(
+  "/email/change/confirm",
+  requireTrustedOrigin,
+  confirmEmailChangeLimit,
+  controller.confirmEmailChange,
+);
+
+authRouter.get(
+  "/account/export",
+  requireAuth,
+  exportAccountLimit,
+  controller.exportAccount,
+);
+authRouter.delete(
+  "/account",
+  requireTrustedOrigin,
+  requireAuth,
+  deleteAccountLimit,
+  controller.deleteAccount,
 );

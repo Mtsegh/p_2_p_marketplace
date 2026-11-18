@@ -1,6 +1,7 @@
 import type { Request, RequestHandler } from "express";
 import { AppError } from "../../lib/app-error.js";
 import { parseInput } from "../../lib/validate.js";
+import * as account from "./account.service.js";
 import * as authService from "./auth.service.js";
 import { toUserDto } from "./auth.dto.js";
 import {
@@ -8,9 +9,14 @@ import {
   readRefreshCookie,
   setRefreshCookie,
 } from "./cookies.js";
+import * as emailChange from "./email-change.service.js";
 import * as emailVerification from "./email-verification.service.js";
 import * as passwordReset from "./password-reset.service.js";
 import {
+  changeEmailSchema,
+  changePasswordSchema,
+  deleteAccountSchema,
+  emailChangeConfirmSchema,
   forgotPasswordSchema,
   loginSchema,
   registerSchema,
@@ -137,4 +143,47 @@ export const resetPassword: RequestHandler = async (req, res) => {
   // Every session was revoked by the reset, so the cookie (if any) is dead too.
   clearRefreshCookie(res);
   res.status(204).end();
+};
+
+export const changePassword: RequestHandler = async (req, res) => {
+  const input = parseInput(changePasswordSchema, req.body);
+
+  await account.changePassword(req.auth!.userId, req.auth!.sessionId, input);
+
+  res.status(204).end();
+};
+
+export const changeEmail: RequestHandler = async (req, res) => {
+  const input = parseInput(changeEmailSchema, req.body);
+
+  await emailChange.requestEmailChange(req.auth!.userId, input);
+
+  res
+    .status(202)
+    .json({ data: { status: "queued" }, meta: { requestId: req.id } });
+};
+
+export const confirmEmailChange: RequestHandler = async (req, res) => {
+  const { token } = parseInput(emailChangeConfirmSchema, req.body);
+  const result = await emailChange.confirmEmailChange(token);
+
+  res.json({ data: result, meta: { requestId: req.id } });
+};
+
+export const deleteAccount: RequestHandler = async (req, res) => {
+  const input = parseInput(deleteAccountSchema, req.body);
+
+  await account.deleteAccount(req.auth!.userId, input);
+
+  // Every session is gone, so the cookie must go with them.
+  clearRefreshCookie(res);
+  res.status(204).end();
+};
+
+export const exportAccount: RequestHandler = async (req, res) => {
+  const data = await account.exportAccountData(req.auth!.userId);
+  const filename = `marketplace-account-${data.exportedAt.slice(0, 10)}.json`;
+
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  res.json({ data, meta: { requestId: req.id } });
 };

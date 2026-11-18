@@ -18,11 +18,17 @@ export interface SessionInput {
 }
 
 export function findUserByEmail(email: string) {
-  return prisma.user.findUnique({ where: { email } });
+  return prisma.user.findUnique({
+    where: { email },
+    include: { profile: true },
+  });
 }
 
 export function findUserById(id: string) {
-  return prisma.user.findUnique({ where: { id } });
+  return prisma.user.findUnique({
+    where: { id },
+    include: { profile: true },
+  });
 }
 
 /**
@@ -34,7 +40,12 @@ export function createUserWithSession(
   session: Omit<SessionInput, "userId">,
 ) {
   return prisma.$transaction(async (tx) => {
-    const createdUser = await tx.user.create({ data: user });
+    // Nested create: the account and its profile row exist together or not at
+    // all, so no query can ever see a user without a profile.
+    const createdUser = await tx.user.create({
+      data: { ...user, profile: { create: {} } },
+      include: { profile: true },
+    });
     const createdSession = await tx.session.create({
       data: { ...session, userId: createdUser.id },
     });
@@ -50,7 +61,7 @@ export function createSession(input: SessionInput, db: Db = prisma) {
 export function findSessionByTokenHash(tokenHash: string) {
   return prisma.session.findUnique({
     where: { tokenHash },
-    include: { user: true },
+    include: { user: { include: { profile: true } } },
   });
 }
 
@@ -121,6 +132,8 @@ export interface CreateAuthTokenInput {
   type: "EMAIL_VERIFY" | "PASSWORD_RESET" | "EMAIL_CHANGE";
   tokenHash: string;
   expiresAt: Date;
+  /** Token-specific data, such as the pending address of an EMAIL_CHANGE. */
+  payload?: Prisma.InputJsonValue;
 }
 
 /**
@@ -180,6 +193,7 @@ export function consumeAuthTokenAndVerifyEmail(
     return tx.user.update({
       where: { id: userId },
       data: { emailVerifiedAt: new Date() },
+      include: { profile: true },
     });
   });
 }
@@ -240,6 +254,7 @@ export function listUsers({ q, limit, cursor }: ListUsersInput) {
       : undefined,
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: limit + 1,
+    include: { profile: true },
     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
   });
 }

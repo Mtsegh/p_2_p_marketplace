@@ -39,6 +39,31 @@ export const resetPasswordSchema = z
   .object({ token: actionToken, password })
   .strict();
 
+/**
+ * The current password is only checked for presence, not for the 10-character
+ * policy: an account created before that rule still has a valid short password.
+ */
+const currentPassword = z
+  .string()
+  .min(1, "Enter your password")
+  .max(200, "Password is too long");
+
+export const changePasswordSchema = z
+  .object({ currentPassword, newPassword: password })
+  .strict();
+
+export const changeEmailSchema = z
+  .object({ newEmail: email, password: currentPassword })
+  .strict();
+
+export const deleteAccountSchema = z
+  .object({ password: currentPassword })
+  .strict();
+
+export const emailChangeConfirmSchema = z
+  .object({ token: actionToken })
+  .strict();
+
 export const sessionParamsSchema = z
   .object({ sessionId: z.string().uuid("Session id must be a UUID") })
   .strict();

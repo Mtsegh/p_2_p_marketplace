@@ -1,9 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getAccessToken, setAccessToken } from "./api";
 import {
+  changePassword,
+  confirmEmailChange,
+  deleteAccount,
+  exportAccountData,
   logoutAccount,
   refreshSession,
   registerAccount,
+  requestEmailChange,
   requestPasswordReset,
   resetPassword,
   verifyEmailToken,
@@ -18,6 +23,9 @@ const user: AuthUser = {
   emailVerified: false,
   phoneVerified: false,
   createdAt: "2026-11-18T10:00:00.000Z",
+  displayName: "Ade Balogun",
+  bio: "Trades cameras and bike parts.",
+  location: "Lagos",
 };
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -193,5 +201,159 @@ describe("resetPassword", () => {
       resetPassword("spent-token", "a-brand-new-password"),
     ).rejects.toThrow("This link is invalid or has expired.");
     expect(getAccessToken()).toBeNull();
+  });
+});
+
+describe("changePassword", () => {
+  it("posts both passwords and keeps the current session", async () => {
+    setAccessToken("access-token-6");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      changePassword({
+        currentPassword: "old-password",
+        newPassword: "a-brand-new-password",
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(getAccessToken()).toBe("access-token-6");
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+
+    expect(url).toContain("/api/v1/auth/password/change");
+    expect(init.method).toBe("POST");
+    expect(init.body).toBe(
+      JSON.stringify({
+        currentPassword: "old-password",
+        newPassword: "a-brand-new-password",
+      }),
+    );
+  });
+});
+
+describe("requestEmailChange", () => {
+  it("posts the new address and the password", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ data: { status: "queued" } }, 202));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      requestEmailChange({
+        newEmail: "new@example.com",
+        password: "old-password",
+      }),
+    ).resolves.toBeUndefined();
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+
+    expect(url).toContain("/api/v1/auth/email/change");
+    expect(init.body).toBe(
+      JSON.stringify({ newEmail: "new@example.com", password: "old-password" }),
+    );
+  });
+});
+
+describe("confirmEmailChange", () => {
+  it("posts the token and returns the new address", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        data: { email: "new@example.com", userId: user.id },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(confirmEmailChange("token-from-email")).resolves.toEqual({
+      email: "new@example.com",
+      userId: user.id,
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+
+    expect(url).toContain("/api/v1/auth/email/change/confirm");
+    expect(init.body).toBe(JSON.stringify({ token: "token-from-email" }));
+  });
+});
+
+describe("deleteAccount", () => {
+  it("sends the password and drops the access token", async () => {
+    setAccessToken("access-token-7");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(deleteAccount("old-password")).resolves.toBeUndefined();
+
+    expect(getAccessToken()).toBeNull();
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+
+    expect(url).toContain("/api/v1/auth/account");
+    expect(init.method).toBe("DELETE");
+    expect(init.body).toBe(JSON.stringify({ password: "old-password" }));
+  });
+
+  it("still drops the token when the API refuses", async () => {
+    setAccessToken("access-token-8");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse(
+          {
+            error: {
+              code: "INVALID_PASSWORD",
+              message: "The password is incorrect",
+            },
+          },
+          400,
+        ),
+      ),
+    );
+
+    await expect(deleteAccount("wrong")).rejects.toThrow(
+      "The password is incorrect",
+    );
+    expect(getAccessToken()).toBeNull();
+  });
+});
+
+describe("exportAccountData", () => {
+  it("returns the exported document", async () => {
+    const exported = {
+      exportedAt: "2026-11-18T12:00:00.000Z",
+      account: {
+        id: user.id,
+        email: user.email,
+        role: "USER",
+        status: "ACTIVE",
+        emailVerified: true,
+        phoneVerified: false,
+        createdAt: user.createdAt,
+        updatedAt: "2026-11-18T11:00:00.000Z",
+      },
+      profile: {
+        displayName: user.displayName,
+        bio: user.bio,
+        location: user.location,
+        createdAt: user.createdAt,
+        updatedAt: "2026-11-18T11:00:00.000Z",
+      },
+      sessions: [],
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ data: exported }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(exportAccountData()).resolves.toEqual(exported);
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+
+    expect(url).toContain("/api/v1/auth/account/export");
+    expect(init.method).toBeUndefined();
   });
 });
