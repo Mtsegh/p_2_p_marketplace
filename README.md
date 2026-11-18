@@ -63,6 +63,8 @@ Run these from inside `client/` or `server/` as noted.
 | `npm run start` | server | Run the built API from `dist/` |
 | `npm run lint` | both | ESLint |
 | `npm run typecheck` | both | Type-check; the client runs `next typegen` first |
+| `npm run test` | both | Run the unit and integration suites once |
+| `npm run test:watch` | both | Run tests in watch mode |
 | `npm run format` | both | Format with Prettier |
 | `npm run db:migrate` | server | Create and apply a Prisma migration, then regenerate the client |
 | `npm run db:deploy` | server | Apply committed migrations without generating (staging/production) |
@@ -87,6 +89,56 @@ recreated by the server's `postinstall` hook, `npm run db:generate`, or
 `npm run db:migrate`. Prisma 7 does not run `prisma generate` automatically
 after `migrate dev`, which is why the migrate script chains both.
 
+### Testing
+
+The client suite is pure unit tests (Vitest + jsdom-free `node` environment).
+The server suite runs API integration tests with Supertest against a real
+PostgreSQL database named `marketplace_test`, so constraints and transactions
+are exercised rather than mocked.
+
+Create the test database once. It is separate from the development database and
+safe to reset:
+
+```bash
+docker compose exec postgres psql -U marketplace -d postgres \
+  -c "CREATE DATABASE marketplace_test OWNER marketplace"
+```
+
+On a brand-new Docker volume the init script at
+`docker/postgres/init/01-create-test-database.sql` creates it automatically. If
+the database already exists, the command above fails with "already exists" and
+that is fine. To rebuild the volume from scratch, run
+`docker compose down -v` (this deletes the development data too).
+
+Then:
+
+```bash
+cd server
+npm run test
+```
+
+`server/test/global-setup.ts` applies the committed migrations to
+`TEST_DATABASE_URL` before the suites run. It refuses to start unless the
+database name ends in `_test`, so a mistyped URL cannot wipe development data.
+The suites share one database and run serially; each test that writes data must
+clean up after itself.
+
+```bash
+cd client
+npm run test
+```
+
+Set `TEST_DATABASE_URL` in `server/.env` (see the table below). Without it, the
+harness falls back to the same local `marketplace_test` URL.
+
+### Continuous integration
+
+`.github/workflows/ci.yml` runs lint, typecheck, test, and build for both
+projects on every pull request and on pushes to `main`, with PostgreSQL and
+Redis service containers. Staging deployment is not automated yet; the required
+domain layout and account setup are documented in
+[`docs/staging.md`](docs/staging.md).
+
 ## Project structure
 
 ```
@@ -110,6 +162,7 @@ after `migrate dev`, which is why the migrate script chains both.
 | `CLIENT_URL` | `http://localhost:3000` | Only origin allowed by CORS |
 | `DATABASE_URL` | `postgresql://marketplace:marketplace@localhost:5432/marketplace` | Must match `docker-compose.yml` |
 | `REDIS_URL` | `redis://localhost:6379` | Local Redis |
+| `TEST_DATABASE_URL` | `postgresql://marketplace:marketplace@localhost:5432/marketplace_test` | Test database; the name must end in `_test` |
 | `LOG_LEVEL` | `info` | `fatal`, `error`, `warn`, `info`, `debug`, `trace`, or `silent` |
 
 The server validates these variables at startup and exits with a list of the
@@ -133,3 +186,7 @@ missing or malformed ones. It never reads `process.env` anywhere else.
   message lists every problem.
 - **`EADDRINUSE` on `3000` or `4000`**: stop the process using the port, or set
   a different `PORT` in `server/.env`.
+- **Server tests fail with a database error**: the `marketplace_test` database
+  does not exist yet. Create it with the command in
+  [Testing](#testing), or run `docker compose down -v` on a throwaway volume so
+  the init script creates it.
