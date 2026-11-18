@@ -1,0 +1,102 @@
+// Prisma schema for the P2P marketplace.
+//
+// Lives at the repository root per AGENTS.md. The Prisma CLI is run from
+// `server/` and configured by `server/prisma.config.ts`.
+//
+// Scope: the identity slice needed by Phases 1 and 2. `Profile` (chunk 7) and
+// `PhoneOtp` (chunk 8) are added with their own migrations when those chunks
+// land. `AuthTokenType.EMAIL_CHANGE` and `UserStatus.DELETED` already exist so
+// chunks 7's change-email and delete-account flows do not need enum migrations.
+
+generator client {
+  provider            = "prisma-client"
+  output              = "../server/src/generated/prisma"
+  runtime             = "nodejs"
+  moduleFormat        = "esm"
+  importFileExtension = "js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+enum AuthTokenType {
+  EMAIL_VERIFY
+  PASSWORD_RESET
+  EMAIL_CHANGE
+}
+
+/// Account and credential record. Public profile data lives in `Profile` (chunk 7).
+model User {
+  id              String     @id @default(uuid()) @db.Uuid
+  email           String     @unique
+  passwordHash    String     @map("password_hash")
+  role            UserRole   @default(USER)
+  status          UserStatus @default(ACTIVE)
+  emailVerifiedAt DateTime?  @map("email_verified_at") @db.Timestamptz(3)
+  /// E.164 format. Unique so one phone number cannot verify several accounts.
+  phoneE164       String?    @unique @map("phone_e164")
+  phoneVerifiedAt DateTime?  @map("phone_verified_at") @db.Timestamptz(3)
+  createdAt       DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  sessions   Session[]
+  authTokens AuthToken[]
+
+  @@map("users")
+}
+
+/// Refresh-token session. Stores only a hash of the opaque refresh token.
+/// `familyId` groups every token descended from one login so reuse detection
+/// can revoke the whole family.
+model Session {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  familyId  String    @map("family_id") @db.Uuid
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(3)
+  userAgent String?   @map("user_agent")
+  ip        String?
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([familyId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+/// Single-use, hashed action token for email verification, password reset, and
+/// (chunk 7) email change. `payload` carries token-specific data such as the
+/// pending new address for EMAIL_CHANGE.
+model AuthToken {
+  id        String        @id @default(uuid()) @db.Uuid
+  userId    String        @map("user_id") @db.Uuid
+  type      AuthTokenType
+  tokenHash String        @unique @map("token_hash")
+  expiresAt DateTime      @map("expires_at") @db.Timestamptz(3)
+  usedAt    DateTime?     @map("used_at") @db.Timestamptz(3)
+  payload   Json?
+  createdAt DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+  @@index([expiresAt])
+  @@map("auth_tokens")
+}

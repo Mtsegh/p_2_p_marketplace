@@ -33,7 +33,8 @@ Express API (`server/`); each is installed, run, and deployed on its own.
    npm run dev
    ```
 
-   The API listens on <http://localhost:4000>. `GET /` returns `{ "ok": true }`.
+   The API listens on <http://localhost:4000>. `GET /health` returns `200` when
+   Postgres and Redis are reachable.
 
 3. Start the web app in a second terminal:
 
@@ -62,6 +63,28 @@ Run these from inside `client/` or `server/` as noted.
 | `npm run lint` | both | ESLint |
 | `npm run typecheck` | both | Type-check; the client runs `next typegen` first |
 | `npm run format` | both | Format with Prettier |
+| `npm run db:migrate` | server | Create and apply a Prisma migration, then regenerate the client |
+| `npm run db:deploy` | server | Apply committed migrations without generating (staging/production) |
+| `npm run db:generate` | server | Regenerate the Prisma client into `server/src/generated/` |
+| `npm run db:reset` | server | Drop, recreate, and re-migrate the dev database |
+| `npm run db:studio` | server | Open Prisma Studio |
+
+### Database workflow
+
+The schema and migrations live in `prisma/` at the repository root. The Prisma
+CLI configuration lives in `server/prisma.config.ts`, so run Prisma commands
+from `server/`:
+
+```bash
+cd server
+npm run db:migrate        # after editing prisma/schema.prisma
+npm run db:generate       # after pulling schema changes
+```
+
+Generated Prisma client code (`server/src/generated/`) is gitignored and is
+recreated by the server's `postinstall` hook, `npm run db:generate`, or
+`npm run db:migrate`. Prisma 7 does not run `prisma generate` automatically
+after `migrate dev`, which is why the migrate script chains both.
 
 ## Project structure
 
@@ -69,7 +92,8 @@ Run these from inside `client/` or `server/` as noted.
 /
 ├── client/               # Next.js frontend (App Router)
 ├── server/               # Express API
-├── docs/                 # Architecture notes and API contract (later chunks)
+├── prisma/               # Prisma schema and migrations
+├── docs/                 # Design rules, API contract, architecture notes
 ├── docker-compose.yml    # PostgreSQL and Redis for local development
 └── AGENTS.md             # Conventions and working rules
 ```
@@ -85,6 +109,7 @@ Run these from inside `client/` or `server/` as noted.
 | `CLIENT_URL` | `http://localhost:3000` | Only origin allowed by CORS |
 | `DATABASE_URL` | `postgresql://marketplace:marketplace@localhost:5432/marketplace` | Must match `docker-compose.yml` |
 | `REDIS_URL` | `redis://localhost:6379` | Local Redis |
+| `LOG_LEVEL` | `info` | `fatal`, `error`, `warn`, `info`, `debug`, `trace`, or `silent` |
 
 The server validates these variables at startup and exits with a list of the
 missing or malformed ones. It never reads `process.env` anywhere else.

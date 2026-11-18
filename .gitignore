@@ -11,6 +11,9 @@ dist/
 coverage/
 *.tsbuildinfo
 
+# generated code
+server/src/generated/
+
 # environment files (never commit real secrets)
 .env
 .env.*

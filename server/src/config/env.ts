@@ -25,6 +25,9 @@ const envSchema = z.object({
   CLIENT_URL: protocolUrl(["http:", "https:"]),
   DATABASE_URL: protocolUrl(["postgresql:", "postgres:"]),
   REDIS_URL: protocolUrl(["redis:", "rediss:"]),
+  LOG_LEVEL: z
+    .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
+    .default("info"),
 });
 
 const parsed = envSchema.safeParse(process.env);

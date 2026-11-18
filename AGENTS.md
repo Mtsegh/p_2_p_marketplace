@@ -57,6 +57,8 @@ Revisit only if full-text search outgrows Postgres (then add Elasticsearch/Meili
 
 `client/` and `server/` live in the same repo but are built, run, tested, and deployed **independently**. Each has its own `package.json`, dependencies, linting, and TypeScript config. Do not import code across them, and do not mix frontend and backend code.
 
+UI and API conventions are defined in [`docs/DESIGN-RULES.md`](docs/DESIGN-RULES.md). Read the relevant part before writing client or server code. If it conflicts with this file, this file wins; report the conflict.
+
 ## Commands
 
 `client/` and `server/` are separate projects. Run commands from inside the relevant folder (`cd client` or `cd server`). Update these if scripts change, and always check that folder's `package.json` before assuming.
@@ -68,23 +70,25 @@ npm run build          # production build
 npm run lint           # eslint
 npm run typecheck      # tsc --noEmit (client generates Next route types first)
 npm run format         # prettier --write .
-npm run test           # unit and integration tests (added in a later chunk)
+npm run test           # unit and integration tests (added in chunk 4)
 npm run test:e2e       # Playwright end-to-end tests (added in a later chunk)
-npx prisma migrate dev --schema ../prisma/schema.prisma # run from server/; create/apply a migration locally (chunk 2)
-npx prisma generate --schema ../prisma/schema.prisma    # run from server/; regenerate the Prisma client (chunk 2)
-npm run db:seed        # seed dev data (chunk 2)
+npm run db:migrate     # run from server/; create/apply a development migration
+npm run db:generate    # run from server/; regenerate the Prisma client
+npm run db:studio      # run from server/; open Prisma Studio
+npm run db:reset       # run from server/; drop, recreate, and re-migrate the dev database
+npm run db:seed        # seed dev data (added in chunk 5, once password hashing exists)
 ```
 
-Local infrastructure (PostgreSQL, Redis) runs through Docker Compose from the repository root: `docker compose up -d`.
+Local infrastructure (PostgreSQL, Redis) runs through Docker Compose from the repository root: `docker compose up -d`. Prisma CLI configuration lives in `server/prisma.config.ts`; the schema and migrations live in `prisma/` at the repository root.
 
-Before declaring any task done, run `lint` and `typecheck`. The `test` suites arrive with the backend skeleton; from then on run them as well.
+Before declaring any task done, run `lint` and `typecheck`. The test suites arrive in chunk 4; from then on run them as well.
 
 ## Coding Conventions
 
 - **TypeScript everywhere**, with `strict` mode on. No `any` without a comment explaining why.
 - Validate all external input (request bodies, query params, env vars, webhooks) with **zod** on the server. The client keeps its own form validation and types. Because there is no shared package, document the API contract in `docs/` (OpenAPI or a markdown spec) and update it whenever an endpoint changes.
 - Backend layering: `routes` -> `controllers` -> `services` -> `repositories/db`. Controllers stay thin; business logic lives in services.
-- Use a consistent error format: `{ error: { code, message, details? } }` with correct HTTP status codes.
+- Use a consistent error format: `{ error: { code, message, details?, requestId } }` with correct HTTP status codes.
 - REST conventions: plural nouns, versioned under `/api/v1`, cursor or page-based pagination on every list endpoint.
 - Use async/await, never unhandled promises. Wrap Express async handlers so errors reach the error middleware.
 - Frontend: server components by default; client components only when interactivity is needed. Data fetching through a single API client module (TanStack Query for client-side caching).
