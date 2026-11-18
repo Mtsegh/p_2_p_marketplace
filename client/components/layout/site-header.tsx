@@ -1,8 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useState } from "react";
+import { Button, ButtonLink } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/cn";
+import { useAuth } from "@/lib/auth";
 import { PageContainer } from "./page-container";
 import { ThemeToggle } from "./theme-toggle";
 
@@ -18,6 +22,60 @@ function isActive(pathname: string, href: string, exact?: boolean): boolean {
   return exact
     ? pathname === href
     : pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function AccountNav() {
+  const router = useRouter();
+  const { user, status, logout } = useAuth();
+  const [signingOut, setSigningOut] = useState(false);
+
+  if (status === "loading") {
+    return (
+      <div role="status" className="w-20">
+        <span className="sr-only">Checking your session</span>
+        <Skeleton className="h-9 w-20" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <ButtonLink href="/login" variant="secondary" size="sm">
+        Sign in
+      </ButtonLink>
+    );
+  }
+
+  async function handleSignOut(): Promise<void> {
+    setSigningOut(true);
+
+    try {
+      await logout();
+    } finally {
+      setSigningOut(false);
+      router.replace("/");
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <Link
+        href="/profile"
+        title={user.email}
+        className="hidden max-w-40 truncate text-sm text-muted hover:text-foreground sm:block"
+      >
+        {user.email}
+      </Link>
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={handleSignOut}
+        loading={signingOut}
+      >
+        Sign out
+      </Button>
+    </div>
+  );
 }
 
 export function SiteHeader() {
@@ -59,7 +117,10 @@ export function SiteHeader() {
             </ul>
           </nav>
 
-          <ThemeToggle />
+          <div className="flex items-center gap-2">
+            <AccountNav />
+            <ThemeToggle />
+          </div>
         </PageContainer>
       </header>
 

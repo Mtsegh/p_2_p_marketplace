@@ -13,12 +13,22 @@ process.env.PORT ??= "4000";
 process.env.DATABASE_URL =
   process.env.TEST_DATABASE_URL ??
   "postgresql://marketplace:marketplace@localhost:5432/marketplace_test";
-process.env.REDIS_URL ??= "redis://localhost:6379/1";
+process.env.REDIS_URL =
+  process.env.TEST_REDIS_URL ?? "redis://localhost:6379/1";
+process.env.JWT_ACCESS_SECRET =
+  "test-only-access-token-secret-with-32-plus-characters";
+process.env.ACCESS_TOKEN_TTL_SECONDS ??= "900";
+process.env.REFRESH_TOKEN_TTL_DAYS ??= "30";
 
+/**
+ * Close handles between files so Vitest can exit. Redis is disconnected rather
+ * than quit: `ensureRedisConnected` reconnects the same client for the next
+ * file. Prisma reconnects on the next query after `$disconnect`.
+ */
 afterAll(async () => {
   const { prisma } = await import("../src/db/prisma.js");
-  const { closeRedis } = await import("../src/db/redis.js");
+  const { redis } = await import("../src/db/redis.js");
 
+  redis.disconnect();
   await prisma.$disconnect();
-  await closeRedis();
 });

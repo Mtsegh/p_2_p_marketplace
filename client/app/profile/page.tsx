@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { PageContainer } from "@/components/layout/page-container";
-import { EmptyState } from "@/components/ui/empty-state";
+import { ProfileView } from "@/components/profile/profile-view";
 
 export const metadata: Metadata = {
   title: "Profile",
@@ -13,13 +13,10 @@ export default function ProfilePage() {
         Profile
       </h1>
       <p className="mt-2 max-w-2xl text-muted">
-        Your public profile and account settings.
+        Your account and public profile.
       </p>
       <div className="mt-8">
-        <EmptyState
-          title="Your profile will live here"
-          description="Sign in to manage your account, public profile, and deals."
-        />
+        <ProfileView />
       </div>
     </PageContainer>
   );

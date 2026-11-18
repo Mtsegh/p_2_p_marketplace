@@ -25,6 +25,18 @@ const envSchema = z.object({
   CLIENT_URL: protocolUrl(["http:", "https:"]),
   DATABASE_URL: protocolUrl(["postgresql:", "postgres:"]),
   REDIS_URL: protocolUrl(["redis:", "rediss:"]),
+  /** HMAC key for access tokens. Rotating it signs every user out. */
+  JWT_ACCESS_SECRET: z
+    .string()
+    .min(32, "must be at least 32 characters")
+    .max(512),
+  ACCESS_TOKEN_TTL_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(60)
+    .max(3_600)
+    .default(900),
+  REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().min(1).max(90).default(30),
   LOG_LEVEL: z
     .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
     .default("info"),

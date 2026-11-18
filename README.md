@@ -56,21 +56,22 @@ gitignored. Every new environment variable must be added to the matching
 
 Run these from inside `client/` or `server/` as noted.
 
-| Command | Project | Description |
-| --- | --- | --- |
-| `npm run dev` | both | Start the development server |
-| `npm run build` | both | Production build |
-| `npm run start` | server | Run the built API from `dist/` |
-| `npm run lint` | both | ESLint |
-| `npm run typecheck` | both | Type-check; the client runs `next typegen` first |
-| `npm run test` | both | Run the unit and integration suites once |
-| `npm run test:watch` | both | Run tests in watch mode |
-| `npm run format` | both | Format with Prettier |
-| `npm run db:migrate` | server | Create and apply a Prisma migration, then regenerate the client |
-| `npm run db:deploy` | server | Apply committed migrations without generating (staging/production) |
-| `npm run db:generate` | server | Regenerate the Prisma client into `server/src/generated/` |
-| `npm run db:reset` | server | Drop, recreate, and re-migrate the dev database |
-| `npm run db:studio` | server | Open Prisma Studio |
+| Command               | Project | Description                                                        |
+| --------------------- | ------- | ------------------------------------------------------------------ |
+| `npm run dev`         | both    | Start the development server                                       |
+| `npm run build`       | both    | Production build                                                   |
+| `npm run start`       | server  | Run the built API from `dist/`                                     |
+| `npm run lint`        | both    | ESLint                                                             |
+| `npm run typecheck`   | both    | Type-check; the client runs `next typegen` first                   |
+| `npm run test`        | both    | Run the unit and integration suites once                           |
+| `npm run test:watch`  | both    | Run tests in watch mode                                            |
+| `npm run format`      | both    | Format with Prettier                                               |
+| `npm run db:migrate`  | server  | Create and apply a Prisma migration, then regenerate the client    |
+| `npm run db:deploy`   | server  | Apply committed migrations without generating (staging/production) |
+| `npm run db:generate` | server  | Regenerate the Prisma client into `server/src/generated/`          |
+| `npm run db:reset`    | server  | Drop, recreate, and re-migrate the dev database                    |
+| `npm run db:seed`     | server  | Create or reset the development admin account                      |
+| `npm run db:studio`   | server  | Open Prisma Studio                                                 |
 
 ### Database workflow
 
@@ -131,6 +132,39 @@ npm run test
 Set `TEST_DATABASE_URL` in `server/.env` (see the table below). Without it, the
 harness falls back to the same local `marketplace_test` URL.
 
+Server tests also use a separate Redis database (`redis://localhost:6379/1`, or
+`TEST_REDIS_URL` when set) so rate-limit counters and the logout denylist do not
+collide with the development API. Each suite flushes that database before it
+starts.
+
+### Accounts and sessions
+
+Registration, sign-in, session listing, and session revocation are in place. The
+access token is kept in memory on the client; the refresh token is an
+`HttpOnly`, `SameSite=Lax` cookie scoped to `/api/v1/auth`, so a page reload
+quietly trades it for a new access token.
+
+Seed the development administrator once:
+
+```bash
+cd server
+npm run db:seed
+```
+
+That creates `admin@example.com` with the password `dev-admin-password`, or
+resets it if it already exists. Set `SEED_ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD`
+to use different values; seeding with `NODE_ENV=production` requires an explicit
+password.
+
+Two deployment constraints come with this design, both documented in
+[`docs/staging.md`](docs/staging.md):
+
+- The client and API must be subdomains of one registrable domain (`app.` and
+  `api.`) so the refresh cookie is same-site. Cross-site hosts need
+  `SameSite=None`, which also means third-party cookie blocking applies.
+- `CLIENT_URL` must be the exact client origin. Auth writes reject any other
+  `Origin` header, which is what replaces a CSRF token here.
+
 ### Continuous integration
 
 `.github/workflows/ci.yml` runs lint, typecheck, test, and build for both
@@ -155,23 +189,33 @@ domain layout and account setup are documented in
 
 ### Server (`server/.env`)
 
-| Variable | Example | Notes |
-| --- | --- | --- |
-| `NODE_ENV` | `development` | `development`, `test`, or `production` |
-| `PORT` | `4000` | API port |
-| `CLIENT_URL` | `http://localhost:3000` | Only origin allowed by CORS |
-| `DATABASE_URL` | `postgresql://marketplace:marketplace@localhost:5432/marketplace` | Must match `docker-compose.yml` |
-| `REDIS_URL` | `redis://localhost:6379` | Local Redis |
-| `TEST_DATABASE_URL` | `postgresql://marketplace:marketplace@localhost:5432/marketplace_test` | Test database; the name must end in `_test` |
-| `LOG_LEVEL` | `info` | `fatal`, `error`, `warn`, `info`, `debug`, `trace`, or `silent` |
+| Variable                   | Example                                                                | Notes                                                                              |
+| -------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `NODE_ENV`                 | `development`                                                          | `development`, `test`, or `production`                                             |
+| `PORT`                     | `4000`                                                                 | API port                                                                           |
+| `CLIENT_URL`               | `http://localhost:3000`                                                | Only origin allowed by CORS                                                        |
+| `DATABASE_URL`             | `postgresql://marketplace:marketplace@localhost:5432/marketplace`      | Must match `docker-compose.yml`                                                    |
+| `REDIS_URL`                | `redis://localhost:6379`                                               | Local Redis                                                                        |
+| `TEST_DATABASE_URL`        | `postgresql://marketplace:marketplace@localhost:5432/marketplace_test` | Test database; the name must end in `_test`                                        |
+| `TEST_REDIS_URL`           | `redis://localhost:6379/1`                                             | Optional; test Redis database, defaults to `/1`                                    |
+| `JWT_ACCESS_SECRET`        | 48 random bytes, base64url                                             | HMAC key for access tokens; at least 32 characters. Rotating it signs everyone out |
+| `ACCESS_TOKEN_TTL_SECONDS` | `900`                                                                  | Access token lifetime, 60 to 3600                                                  |
+| `REFRESH_TOKEN_TTL_DAYS`   | `30`                                                                   | Refresh session lifetime, 1 to 90                                                  |
+| `LOG_LEVEL`                | `info`                                                                 | `fatal`, `error`, `warn`, `info`, `debug`, `trace`, or `silent`                    |
+
+Generate a secret with:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
+```
 
 The server validates these variables at startup and exits with a list of the
 missing or malformed ones. It never reads `process.env` anywhere else.
 
 ### Client (`client/.env.local`)
 
-| Variable | Example | Notes |
-| --- | --- | --- |
+| Variable              | Example                 | Notes               |
+| --------------------- | ----------------------- | ------------------- |
 | `NEXT_PUBLIC_API_URL` | `http://localhost:4000` | Base URL of the API |
 
 ## Troubleshooting
