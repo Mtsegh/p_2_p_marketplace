@@ -19,6 +19,8 @@ process.env.JWT_ACCESS_SECRET =
   "test-only-access-token-secret-with-32-plus-characters";
 process.env.ACCESS_TOKEN_TTL_SECONDS ??= "900";
 process.env.REFRESH_TOKEN_TTL_DAYS ??= "30";
+// Memory provider: the suite reads the emails instead of delivering them.
+process.env.EMAIL_PROVIDER = "memory";
 
 /**
  * Close handles between files so Vitest can exit. Redis is disconnected rather

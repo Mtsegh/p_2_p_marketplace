@@ -17,30 +17,73 @@ const protocolUrl = (protocols: readonly string[]) =>
     `must start with ${protocols.join(" or ")}`,
   );
 
-const envSchema = z.object({
-  NODE_ENV: z
-    .enum(["development", "test", "production"])
-    .default("development"),
-  PORT: z.coerce.number().int().min(1).max(65535).default(4000),
-  CLIENT_URL: protocolUrl(["http:", "https:"]),
-  DATABASE_URL: protocolUrl(["postgresql:", "postgres:"]),
-  REDIS_URL: protocolUrl(["redis:", "rediss:"]),
-  /** HMAC key for access tokens. Rotating it signs every user out. */
-  JWT_ACCESS_SECRET: z
-    .string()
-    .min(32, "must be at least 32 characters")
-    .max(512),
-  ACCESS_TOKEN_TTL_SECONDS: z.coerce
-    .number()
-    .int()
-    .min(60)
-    .max(3_600)
-    .default(900),
-  REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().min(1).max(90).default(30),
-  LOG_LEVEL: z
-    .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
-    .default("info"),
-});
+const envSchema = z
+  .object({
+    NODE_ENV: z
+      .enum(["development", "test", "production"])
+      .default("development"),
+    PORT: z.coerce.number().int().min(1).max(65535).default(4000),
+    CLIENT_URL: protocolUrl(["http:", "https:"]),
+    DATABASE_URL: protocolUrl(["postgresql:", "postgres:"]),
+    REDIS_URL: protocolUrl(["redis:", "rediss:"]),
+    /** HMAC key for access tokens. Rotating it signs every user out. */
+    JWT_ACCESS_SECRET: z
+      .string()
+      .min(32, "must be at least 32 characters")
+      .max(512),
+    ACCESS_TOKEN_TTL_SECONDS: z.coerce
+      .number()
+      .int()
+      .min(60)
+      .max(3_600)
+      .default(900),
+    REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().min(1).max(90).default(30),
+    /**
+     * How outbound email leaves the process. `brevo` calls the Brevo API,
+     * `console` writes the message to the log (local development), and `memory`
+     * keeps it in an array for tests.
+     */
+    EMAIL_PROVIDER: z.enum(["brevo", "console", "memory"]).default("console"),
+    /** Brevo API key. Empty is accepted outside production, where `console` is used. */
+    BREVO_API_KEY: z.preprocess(
+      (value) =>
+        typeof value === "string" && value.trim() === "" ? undefined : value,
+      z.string().trim().min(1).optional(),
+    ),
+    EMAIL_FROM_ADDRESS: z
+      .string()
+      .trim()
+      .email("must be a valid address")
+      .default("no-reply@marketplace.test"),
+    EMAIL_FROM_NAME: z
+      .string()
+      .trim()
+      .min(1)
+      .max(100)
+      .default("P2P Marketplace"),
+    LOG_LEVEL: z
+      .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
+      .default("info"),
+  })
+  .superRefine((value, context) => {
+    // Production must actually deliver mail. Failing at boot is better than
+    // discovering during a password reset that nothing was ever sent.
+    if (value.NODE_ENV === "production" && value.EMAIL_PROVIDER !== "brevo") {
+      context.addIssue({
+        code: "custom",
+        path: ["EMAIL_PROVIDER"],
+        message: "must be brevo in production",
+      });
+    }
+
+    if (value.NODE_ENV === "production" && !value.BREVO_API_KEY) {
+      context.addIssue({
+        code: "custom",
+        path: ["BREVO_API_KEY"],
+        message: "is required when EMAIL_PROVIDER is brevo",
+      });
+    }
+  });
 
 const parsed = envSchema.safeParse(process.env);
 

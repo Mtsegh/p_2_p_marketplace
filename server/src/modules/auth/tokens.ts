@@ -1,7 +1,8 @@
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { jwtVerify, SignJWT } from "jose";
 import { env } from "../../config/env.js";
 import type { UserRole } from "../../generated/prisma/enums.js";
+import { sha256Hex } from "../../lib/hash.js";
 
 const ACCESS_TOKEN_ISSUER = "marketplace-api";
 const ACCESS_TOKEN_AUDIENCE = "marketplace-client";
@@ -61,7 +62,7 @@ export async function verifyAccessToken(
  * leaked database cannot be replayed as a session.
  */
 export function hashRefreshToken(token: string): string {
-  return createHash("sha256").update(token).digest("hex");
+  return sha256Hex(token);
 }
 
 export function createRefreshToken(): { token: string; tokenHash: string } {

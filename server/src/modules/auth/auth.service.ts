@@ -3,6 +3,7 @@ import { Prisma, type User } from "../../generated/prisma/client.js";
 import { AppError } from "../../lib/app-error.js";
 import * as repository from "./auth.repository.js";
 import type { SessionDto } from "./auth.dto.js";
+import { issueVerificationEmail } from "./email-verification.service.js";
 import { absorbLoginTiming, hashPassword, verifyPassword } from "./password.js";
 import { denySession } from "./token-denylist.js";
 import {
@@ -111,6 +112,10 @@ export async function register(
       sessionId: session.id,
       role: user.role,
     });
+
+    // Sent after the account exists, and never awaited for delivery: the queue
+    // accepts the job and the provider catches up on its own.
+    await issueVerificationEmail(user);
 
     return {
       user,

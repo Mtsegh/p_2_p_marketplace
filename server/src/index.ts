@@ -3,8 +3,14 @@ import { env } from "./config/env.js";
 import { prisma } from "./db/prisma.js";
 import { closeRedis } from "./db/redis.js";
 import { logger } from "./lib/logger.js";
+import { closeEmailQueue } from "./modules/email/email.queue.js";
+import {
+  startEmailWorker,
+  stopEmailWorker,
+} from "./modules/email/email.worker.js";
 
 const app = createApp();
+const emailWorker = startEmailWorker();
 
 const server = app.listen(env.PORT, () => {
   logger.info(
@@ -35,7 +41,12 @@ async function shutdown(signal: string, exitCode = 0): Promise<void> {
       server.closeIdleConnections();
     });
 
-    await Promise.allSettled([prisma.$disconnect(), closeRedis()]);
+    await Promise.allSettled([
+      prisma.$disconnect(),
+      closeRedis(),
+      stopEmailWorker(emailWorker),
+      closeEmailQueue(),
+    ]);
 
     clearTimeout(forceExit);
     logger.info("shutdown complete");

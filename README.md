@@ -165,6 +165,25 @@ Two deployment constraints come with this design, both documented in
 - `CLIENT_URL` must be the exact client origin. Auth writes reject any other
   `Origin` header, which is what replaces a CSRF token here.
 
+### Email verification and password reset
+
+Registration sends a confirmation link through a BullMQ queue. The API process
+runs the worker too, so local development needs no extra service beyond Redis.
+Emails go through a small `EmailProvider` interface:
+
+- `EMAIL_PROVIDER=console` (the default) writes the full text of the message to
+  the API log, including the link. Copy it from the terminal to finish a
+  verification or reset locally.
+- `EMAIL_PROVIDER=brevo` sends through Brevo. Set `BREVO_API_KEY`, and make sure
+  `EMAIL_FROM_ADDRESS` is a verified sender in the Brevo account. The server
+  refuses to start in production with any other provider, so a forgotten key
+  cannot silently stop password resets.
+
+Links expire (24 hours to confirm an address, 1 hour to reset a password) and
+work once. Resetting a password signs out every device. Listing creation and
+proposals require a confirmed address; the profile page has a resend button for
+the link.
+
 ### Continuous integration
 
 `.github/workflows/ci.yml` runs lint, typecheck, test, and build for both
@@ -189,19 +208,23 @@ domain layout and account setup are documented in
 
 ### Server (`server/.env`)
 
-| Variable                   | Example                                                                | Notes                                                                              |
-| -------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `NODE_ENV`                 | `development`                                                          | `development`, `test`, or `production`                                             |
-| `PORT`                     | `4000`                                                                 | API port                                                                           |
-| `CLIENT_URL`               | `http://localhost:3000`                                                | Only origin allowed by CORS                                                        |
-| `DATABASE_URL`             | `postgresql://marketplace:marketplace@localhost:5432/marketplace`      | Must match `docker-compose.yml`                                                    |
-| `REDIS_URL`                | `redis://localhost:6379`                                               | Local Redis                                                                        |
-| `TEST_DATABASE_URL`        | `postgresql://marketplace:marketplace@localhost:5432/marketplace_test` | Test database; the name must end in `_test`                                        |
-| `TEST_REDIS_URL`           | `redis://localhost:6379/1`                                             | Optional; test Redis database, defaults to `/1`                                    |
-| `JWT_ACCESS_SECRET`        | 48 random bytes, base64url                                             | HMAC key for access tokens; at least 32 characters. Rotating it signs everyone out |
-| `ACCESS_TOKEN_TTL_SECONDS` | `900`                                                                  | Access token lifetime, 60 to 3600                                                  |
-| `REFRESH_TOKEN_TTL_DAYS`   | `30`                                                                   | Refresh session lifetime, 1 to 90                                                  |
-| `LOG_LEVEL`                | `info`                                                                 | `fatal`, `error`, `warn`, `info`, `debug`, `trace`, or `silent`                    |
+| Variable                   | Example                                                                | Notes                                                                                                      |
+| -------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `NODE_ENV`                 | `development`                                                          | `development`, `test`, or `production`                                                                     |
+| `PORT`                     | `4000`                                                                 | API port                                                                                                   |
+| `CLIENT_URL`               | `http://localhost:3000`                                                | Only origin allowed by CORS                                                                                |
+| `DATABASE_URL`             | `postgresql://marketplace:marketplace@localhost:5432/marketplace`      | Must match `docker-compose.yml`                                                                            |
+| `REDIS_URL`                | `redis://localhost:6379`                                               | Local Redis                                                                                                |
+| `TEST_DATABASE_URL`        | `postgresql://marketplace:marketplace@localhost:5432/marketplace_test` | Test database; the name must end in `_test`                                                                |
+| `TEST_REDIS_URL`           | `redis://localhost:6379/1`                                             | Optional; test Redis database, defaults to `/1`                                                            |
+| `JWT_ACCESS_SECRET`        | 48 random bytes, base64url                                             | HMAC key for access tokens; at least 32 characters. Rotating it signs everyone out                         |
+| `ACCESS_TOKEN_TTL_SECONDS` | `900`                                                                  | Access token lifetime, 60 to 3600                                                                          |
+| `REFRESH_TOKEN_TTL_DAYS`   | `30`                                                                   | Refresh session lifetime, 1 to 90                                                                          |
+| `EMAIL_PROVIDER`           | `console`                                                              | `console` logs emails locally, `brevo` delivers them, `memory` is for tests. Must be `brevo` in production |
+| `EMAIL_FROM_ADDRESS`       | `no-reply@marketplace.test`                                            | Sender address; with Brevo it must be a verified sender                                                    |
+| `EMAIL_FROM_NAME`          | `P2P Marketplace`                                                      | Sender display name                                                                                        |
+| `BREVO_API_KEY`            | empty locally                                                          | Brevo API key. Required when `EMAIL_PROVIDER=brevo`                                                        |
+| `LOG_LEVEL`                | `info`                                                                 | `fatal`, `error`, `warn`, `info`, `debug`, `trace`, or `silent`                                            |
 
 Generate a secret with:
 

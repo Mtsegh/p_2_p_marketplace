@@ -21,6 +21,8 @@ interface AuthContextValue {
   login: (credentials: Credentials) => Promise<AuthUser>;
   register: (credentials: Credentials) => Promise<AuthUser>;
   logout: () => Promise<void>;
+  /** Writes a user returned by another endpoint into the session cache. */
+  syncUser: (user: AuthUser) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -62,6 +64,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     queryClient.setQueryData(SESSION_KEY, null);
   }
 
+  function syncUser(user: AuthUser): void {
+    queryClient.setQueryData(SESSION_KEY, user);
+  }
+
   return (
     <AuthContext.Provider
       value={{
@@ -72,6 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         register,
         logout,
+        syncUser,
       }}
     >
       {children}

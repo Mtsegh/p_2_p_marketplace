@@ -40,7 +40,7 @@ Target shape (details land in chunk 30):
 - **Database**: RDS PostgreSQL, separate instances per environment.
 - **Cache**: ElastiCache Redis.
 - **Storage/secrets**: Secrets Manager for `DATABASE_URL`, `REDIS_URL`,
-  `JWT_ACCESS_SECRET`, and the seed admin password.
+  `JWT_ACCESS_SECRET`, `BREVO_API_KEY`, and the seed admin password.
 - **Health check**: the load balancer targets `GET /health` and expects `200`.
   The endpoint returns `503` when Postgres or Redis is unreachable, so a bad
   deploy is removed from rotation.
@@ -51,6 +51,9 @@ Target shape (details land in chunk 30):
   `X-Forwarded-For` and `X-Forwarded-Proto`.
 - **CORS**: set `CLIENT_URL=https://app.example.com` exactly, with no trailing
   slash.
+- **Email**: the API process also runs the BullMQ worker, so no separate service
+  is needed. Jobs are distributed across tasks if the service scales out. Brevo
+  requires a verified sender address and a key with transactional email access.
 
 ## Environment variables on staging
 
@@ -64,6 +67,10 @@ Target shape (details land in chunk 30):
 | `JWT_ACCESS_SECRET`        | 48 random bytes; generate per environment, never reuse locally |
 | `ACCESS_TOKEN_TTL_SECONDS` | `900`                                                          |
 | `REFRESH_TOKEN_TTL_DAYS`   | `30`                                                           |
+| `EMAIL_PROVIDER`           | `brevo` (required in production)                               |
+| `EMAIL_FROM_ADDRESS`       | verified sender, e.g. `no-reply@example.com`                   |
+| `EMAIL_FROM_NAME`          | `P2P Marketplace`                                              |
+| `BREVO_API_KEY`            | Brevo API key from Secrets Manager                             |
 | `LOG_LEVEL`                | `info`                                                         |
 
 ## Verification checklist
@@ -73,11 +80,15 @@ Target shape (details land in chunk 30):
 - [ ] Registering on `app.` sets the refresh cookie on `app.`, and a full page
       reload keeps the user signed in.
 - [ ] Signing out, then reloading, leaves the user signed out.
+- [ ] A new registration receives a confirmation email from the verified sender,
+      and the link confirms the address on `app.`.
+- [ ] "Forgot password" delivers a reset link that changes the password and
+      signs out other devices.
 - [ ] Stopping the API shows the error state, and restarting it recovers with
       "Check again".
 - [ ] A pull request runs lint, typecheck, test, and build for both projects.
 - [ ] `app.` and `api.` share one registrable domain (required for the
       `SameSite=Lax` refresh cookie).
 
-Chunk 5 adds the refresh cookie. Staging cannot test it until the domain above
-is settled.
+Chunk 6 adds transactional email. Staging cannot confirm Brevo delivery until
+the domain above is settled and a verified sender exists.

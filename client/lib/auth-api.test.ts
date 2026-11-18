@@ -4,6 +4,9 @@ import {
   logoutAccount,
   refreshSession,
   registerAccount,
+  requestPasswordReset,
+  resetPassword,
+  verifyEmailToken,
   type AuthUser,
 } from "./auth-api";
 
@@ -104,6 +107,91 @@ describe("logoutAccount", () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
 
     await expect(logoutAccount()).rejects.toThrow("offline");
+    expect(getAccessToken()).toBeNull();
+  });
+});
+
+describe("verifyEmailToken", () => {
+  it("posts the token and returns the confirmed user", async () => {
+    const confirmed = { ...user, emailVerified: true };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ data: { user: confirmed } }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(verifyEmailToken("token-from-email")).resolves.toEqual(
+      confirmed,
+    );
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+
+    expect(url).toContain("/api/v1/auth/verify-email");
+    expect(init.method).toBe("POST");
+    expect(init.body).toBe(JSON.stringify({ token: "token-from-email" }));
+  });
+});
+
+describe("requestPasswordReset", () => {
+  it("posts the address", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ data: { status: "accepted" } }, 202));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(requestPasswordReset(user.email)).resolves.toBeUndefined();
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+
+    expect(url).toContain("/api/v1/auth/password/forgot");
+    expect(init.body).toBe(JSON.stringify({ email: user.email }));
+  });
+});
+
+describe("resetPassword", () => {
+  it("posts the token and password, then drops the access token", async () => {
+    setAccessToken("access-token-4");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      resetPassword("token-from-email", "a-brand-new-password"),
+    ).resolves.toBeUndefined();
+
+    expect(getAccessToken()).toBeNull();
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+
+    expect(url).toContain("/api/v1/auth/password/reset");
+    expect(init.body).toBe(
+      JSON.stringify({
+        token: "token-from-email",
+        password: "a-brand-new-password",
+      }),
+    );
+  });
+
+  it("still drops the token when the API rejects the reset", async () => {
+    setAccessToken("access-token-5");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse(
+          {
+            error: {
+              code: "INVALID_TOKEN",
+              message: "This link is invalid or has expired.",
+            },
+          },
+          400,
+        ),
+      ),
+    );
+
+    await expect(
+      resetPassword("spent-token", "a-brand-new-password"),
+    ).rejects.toThrow("This link is invalid or has expired.");
     expect(getAccessToken()).toBeNull();
   });
 });

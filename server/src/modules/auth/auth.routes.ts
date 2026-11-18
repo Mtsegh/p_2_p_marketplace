@@ -1,7 +1,7 @@
 import { Router, type RequestHandler } from "express";
 import { env } from "../../config/env.js";
 import { AppError } from "../../lib/app-error.js";
-import { emailKey, ipKey, rateLimit } from "../../lib/rate-limit.js";
+import { emailKey, ipKey, rateLimit, userKey } from "../../lib/rate-limit.js";
 import * as controller from "./auth.controller.js";
 import { requireAuth } from "./auth.middleware.js";
 
@@ -63,6 +63,46 @@ const refreshLimit = rateLimit({
   key: ipKey,
 });
 
+// Action tokens are 256-bit, so guessing is not the real risk; the limit keeps
+// a script from hammering the endpoints and the database.
+const verifyEmailLimit = rateLimit({
+  name: "verify-email-ip",
+  limit: 30,
+  windowSeconds: FIFTEEN_MINUTES,
+  key: ipKey,
+});
+
+// Resends are per account: one impatient user must not exhaust the IP bucket
+// for everyone behind the same address.
+const resendVerificationLimit = rateLimit({
+  name: "resend-verification-user",
+  limit: 3,
+  windowSeconds: ONE_HOUR,
+  key: userKey,
+});
+
+// Forgot-password is per address and per IP, and answers identically either
+// way, so the buckets are what stop it from becoming an enumeration tool.
+const forgotPasswordEmailLimit = rateLimit({
+  name: "forgot-password-email",
+  limit: 5,
+  windowSeconds: ONE_HOUR,
+  key: emailKey,
+});
+const forgotPasswordIpLimit = rateLimit({
+  name: "forgot-password-ip",
+  limit: 10,
+  windowSeconds: ONE_HOUR,
+  key: ipKey,
+});
+
+const resetPasswordLimit = rateLimit({
+  name: "reset-password-ip",
+  limit: 10,
+  windowSeconds: FIFTEEN_MINUTES,
+  key: ipKey,
+});
+
 authRouter.post(
   "/register",
   requireTrustedOrigin,
@@ -90,4 +130,32 @@ authRouter.delete(
   "/sessions/:sessionId",
   requireAuth,
   controller.revokeSession,
+);
+
+authRouter.post(
+  "/verify-email",
+  requireTrustedOrigin,
+  verifyEmailLimit,
+  controller.verifyEmail,
+);
+authRouter.post(
+  "/verify-email/resend",
+  requireTrustedOrigin,
+  requireAuth,
+  resendVerificationLimit,
+  controller.resendVerification,
+);
+
+authRouter.post(
+  "/password/forgot",
+  requireTrustedOrigin,
+  forgotPasswordIpLimit,
+  forgotPasswordEmailLimit,
+  controller.forgotPassword,
+);
+authRouter.post(
+  "/password/reset",
+  requireTrustedOrigin,
+  resetPasswordLimit,
+  controller.resetPassword,
 );

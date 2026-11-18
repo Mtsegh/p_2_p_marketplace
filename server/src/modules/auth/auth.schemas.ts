@@ -20,6 +20,25 @@ export const registerSchema = z.object({ email, password }).strict();
 
 export const loginSchema = z.object({ email, password }).strict();
 
+/**
+ * Emailed action token. base64url of 32 bytes is 43 characters; the range is
+ * generous so a future format change does not need a schema change, while still
+ * rejecting empty or absurdly long input before it reaches the database.
+ */
+const actionToken = z
+  .string()
+  .trim()
+  .min(26, "Token is invalid")
+  .max(128, "Token is invalid");
+
+export const verifyEmailSchema = z.object({ token: actionToken }).strict();
+
+export const forgotPasswordSchema = z.object({ email }).strict();
+
+export const resetPasswordSchema = z
+  .object({ token: actionToken, password })
+  .strict();
+
 export const sessionParamsSchema = z
   .object({ sessionId: z.string().uuid("Session id must be a UUID") })
   .strict();

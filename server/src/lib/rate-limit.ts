@@ -32,6 +32,14 @@ export function ipKey(req: Request): string {
 }
 
 /**
+ * Authenticated user id. Only meaningful after `requireAuth`, which is why the
+ * routes that use it put the limiter behind that middleware.
+ */
+export function userKey(req: Request): string {
+  return req.auth?.userId ?? "anonymous";
+}
+
+/**
  * Hashes an email before using it in a limiter key. Keeps PII out of Redis and
  * avoids leaking an address to anyone with cache access.
  */

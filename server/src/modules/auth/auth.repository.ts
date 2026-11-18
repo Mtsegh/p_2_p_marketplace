@@ -109,6 +109,124 @@ export function revokeOwnedSession(userId: string, sessionId: string) {
   });
 }
 
+export function revokeAllUserSessions(userId: string) {
+  return prisma.session.updateMany({
+    where: { userId, revokedAt: null },
+    data: { revokedAt: new Date() },
+  });
+}
+
+export interface CreateAuthTokenInput {
+  userId: string;
+  type: "EMAIL_VERIFY" | "PASSWORD_RESET" | "EMAIL_CHANGE";
+  tokenHash: string;
+  expiresAt: Date;
+}
+
+/**
+ * Stores a new action token and drops the user's older unused tokens of the
+ * same type, so only the newest email link works. Doing both in one transaction
+ * means a failure leaves the previous link intact rather than invalidating it
+ * without replacing it.
+ */
+export function createAuthToken(input: CreateAuthTokenInput) {
+  return prisma.$transaction(async (tx) => {
+    const created = await tx.authToken.create({ data: input });
+
+    await tx.authToken.deleteMany({
+      where: {
+        userId: input.userId,
+        type: input.type,
+        usedAt: null,
+        id: { not: created.id },
+      },
+    });
+
+    return created;
+  });
+}
+
+export function findAuthToken(
+  tokenHash: string,
+  type: "EMAIL_VERIFY" | "PASSWORD_RESET" | "EMAIL_CHANGE",
+) {
+  return prisma.authToken.findFirst({ where: { tokenHash, type } });
+}
+
+/**
+ * Consumes the token and confirms the address atomically. The `updateMany`
+ * guard is what makes the link single-use: two concurrent clicks cannot both
+ * find `usedAt` null and proceed.
+ */
+export function consumeAuthTokenAndVerifyEmail(
+  tokenId: string,
+  userId: string,
+) {
+  return prisma.$transaction(async (tx) => {
+    const consumed = await tx.authToken.updateMany({
+      where: {
+        id: tokenId,
+        userId,
+        usedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+      data: { usedAt: new Date() },
+    });
+
+    if (consumed.count === 0) {
+      return null;
+    }
+
+    return tx.user.update({
+      where: { id: userId },
+      data: { emailVerifiedAt: new Date() },
+    });
+  });
+}
+
+/**
+ * Consumes the token, changes the password, and signs every device out in one
+ * transaction. If the password change succeeded without revoking sessions, a
+ * stolen session would survive the reset, which is the whole point of a reset.
+ */
+export function consumeAuthTokenAndResetPassword(
+  tokenId: string,
+  userId: string,
+  passwordHash: string,
+) {
+  return prisma.$transaction(async (tx) => {
+    const consumed = await tx.authToken.updateMany({
+      where: {
+        id: tokenId,
+        userId,
+        usedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+      data: { usedAt: new Date() },
+    });
+
+    if (consumed.count === 0) {
+      return null;
+    }
+
+    const user = await tx.user.update({
+      where: { id: userId },
+      data: { passwordHash },
+    });
+
+    await tx.session.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+
+    await tx.authToken.deleteMany({
+      where: { userId, type: "PASSWORD_RESET", usedAt: null },
+    });
+
+    return user;
+  });
+}
+
 export interface ListUsersInput {
   q?: string;
   limit: number;

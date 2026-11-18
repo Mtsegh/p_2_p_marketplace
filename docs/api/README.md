@@ -168,26 +168,33 @@ is treated as token theft and the whole token family is revoked.
 
 ### Error codes
 
-| Code                    | Status | Meaning                                                                                             |
-| ----------------------- | ------ | --------------------------------------------------------------------------------------------------- |
-| `VALIDATION_ERROR`      | 422    | Body or params failed validation; `details` names the fields                                        |
-| `INVALID_CREDENTIALS`   | 401    | Wrong password, unknown email, or deleted account (deliberately identical, and equalized in timing) |
-| `ACCOUNT_SUSPENDED`     | 403    | Password was correct but the account is suspended                                                   |
-| `EMAIL_IN_USE`          | 409    | Registration with an address that already has an account                                            |
-| `UNAUTHENTICATED`       | 401    | Missing, malformed, or expired access token; or no refresh cookie on refresh                        |
-| `INVALID_REFRESH_TOKEN` | 401    | Refresh cookie is unknown, revoked, or expired                                                      |
-| `FORBIDDEN`             | 403    | Authenticated but the role is not allowed                                                           |
-| `ORIGIN_NOT_ALLOWED`    | 403    | Browser write came from an origin other than `CLIENT_URL`                                           |
-| `RATE_LIMITED`          | 429    | Too many attempts; `Retry-After` says how many seconds to wait                                      |
-| `NOT_FOUND`             | 404    | The resource does not exist or is not visible to this caller                                        |
+| Code                     | Status | Meaning                                                                                             |
+| ------------------------ | ------ | --------------------------------------------------------------------------------------------------- |
+| `VALIDATION_ERROR`       | 422    | Body or params failed validation; `details` names the fields                                        |
+| `INVALID_CREDENTIALS`    | 401    | Wrong password, unknown email, or deleted account (deliberately identical, and equalized in timing) |
+| `ACCOUNT_SUSPENDED`      | 403    | Password was correct but the account is suspended                                                   |
+| `EMAIL_IN_USE`           | 409    | Registration with an address that already has an account                                            |
+| `EMAIL_ALREADY_VERIFIED` | 409    | Resending a confirmation for an address that is already confirmed                                   |
+| `EMAIL_NOT_VERIFIED`     | 403    | The action needs a confirmed address                                                                |
+| `INVALID_TOKEN`          | 400    | Email verification or password reset token is unknown, expired, or already used                     |
+| `UNAUTHENTICATED`        | 401    | Missing, malformed, or expired access token; or no refresh cookie on refresh                        |
+| `INVALID_REFRESH_TOKEN`  | 401    | Refresh cookie is unknown, revoked, or expired                                                      |
+| `FORBIDDEN`              | 403    | Authenticated but the role is not allowed                                                           |
+| `ORIGIN_NOT_ALLOWED`     | 403    | Browser write came from an origin other than `CLIENT_URL`                                           |
+| `RATE_LIMITED`           | 429    | Too many attempts; `Retry-After` says how many seconds to wait                                      |
+| `NOT_FOUND`              | 404    | The resource does not exist or is not visible to this caller                                        |
 
 ### Rate limits
 
-| Endpoint              | Bucket                                            | Limit                                 |
-| --------------------- | ------------------------------------------------- | ------------------------------------- |
-| `POST /auth/register` | per IP                                            | 5 per hour                            |
-| `POST /auth/login`    | per email (SHA-256 hashed as the key), and per IP | 10 per 15 minutes / 30 per 15 minutes |
-| `POST /auth/refresh`  | per IP                                            | 60 per 15 minutes                     |
+| Endpoint                         | Bucket                                            | Limit                                 |
+| -------------------------------- | ------------------------------------------------- | ------------------------------------- |
+| `POST /auth/register`            | per IP                                            | 5 per hour                            |
+| `POST /auth/login`               | per email (SHA-256 hashed as the key), and per IP | 10 per 15 minutes / 30 per 15 minutes |
+| `POST /auth/refresh`             | per IP                                            | 60 per 15 minutes                     |
+| `POST /auth/verify-email`        | per IP                                            | 30 per 15 minutes                     |
+| `POST /auth/verify-email/resend` | per user                                          | 3 per hour                            |
+| `POST /auth/password/forgot`     | per email and per IP                              | 5 per hour / 10 per hour              |
+| `POST /auth/password/reset`      | per IP                                            | 10 per 15 minutes                     |
 
 The limiter uses Redis. If Redis is unavailable the limiter fails open and logs
 a warning: a cache outage must not lock everyone out of signing in.
@@ -292,6 +299,62 @@ Revokes one of the caller's own sessions. `204` on success. Revoking the current
 session also clears the cookie and denylists the access token. A session that
 belongs to another user is `404`, not `403`: the response never confirms that a
 guessed id exists.
+
+### Email verification and password reset
+
+Registration sends a confirmation link. Only a SHA-256 hash of the token is
+stored, it expires (24 hours for verification, 1 hour for reset), and it is
+single use. The client receives the token in the link, then posts it back, so a
+mail scanner that prefetches the URL cannot spend the token.
+
+Nothing is delivered by the API itself: messages go through a BullMQ queue to an
+`EmailProvider`. `EMAIL_PROVIDER=console` (local development) logs the full text
+body so the link can be copied from the API output; `brevo` delivers through the
+Brevo API. Delivery failures are retried three times with exponential backoff.
+
+#### `POST /api/v1/auth/verify-email`
+
+Body: `{ "token": "<token from the link>" }`. `200` with the updated user.
+`400 INVALID_TOKEN` when the token is unknown, expired, or already used;
+`422` when the body is malformed.
+
+```json
+{ "data": { "user": { "id": "...", "emailVerified": true } } }
+```
+
+The access token does not change; the next `/auth/me` and refresh read the new
+state from the database.
+
+#### `POST /api/v1/auth/verify-email/resend`
+
+Requires `Authorization`. `202` with `{ "data": { "status": "queued" } }`. The
+previous link stops working once a new one is issued. `409
+EMAIL_ALREADY_VERIFIED` when the address is already confirmed.
+
+#### `POST /api/v1/auth/password/forgot`
+
+Body: `{ "email": "person@example.com" }`. Always `202` with `{ "data":
+{ "status": "accepted" } }`, whether or not the address has an account, so this
+endpoint cannot be used to check who is registered. Suspended accounts are
+silently skipped.
+
+#### `POST /api/v1/auth/password/reset`
+
+Body: `{ "token": "<token from the link>", "password": "<new password>" }`. `204`
+on success. Sets the new password, revokes every session for the account, and
+invalidates the token in one transaction. `400 INVALID_TOKEN` for an unknown,
+expired, or used token; `422` for a password that breaks the rules.
+
+Because sessions are revoked, the client drops its access token and asks the
+user to sign in again. A previously issued access token remains valid until it
+expires (at most 15 minutes), which is the documented cost of a stateless token.
+
+#### Confirmed addresses
+
+`requireVerifiedEmail` is applied to actions that need a confirmed address:
+listing creation and proposal submission (added in those chunks). It returns
+`403 EMAIL_NOT_VERIFIED` and reads the database rather than the token, because
+the token was minted before the user clicked the link.
 
 ### `GET /api/v1/admin/users`
 

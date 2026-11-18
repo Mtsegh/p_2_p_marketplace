@@ -1,6 +1,7 @@
 import type { Request, RequestHandler } from "express";
 import type { UserRole } from "../../generated/prisma/enums.js";
 import { AppError } from "../../lib/app-error.js";
+import { findUserById } from "./auth.repository.js";
 import { isSessionDenied } from "./token-denylist.js";
 import { verifyAccessToken } from "./tokens.js";
 
@@ -60,3 +61,38 @@ export function requireRole(role: UserRole): RequestHandler {
     next();
   };
 }
+
+/**
+ * Blocks actions that require a confirmed address: creating listings, making
+ * proposals, and anything payment-related. Authentication alone is not enough
+ * because a typo in the address would otherwise lock the user out of recovery.
+ *
+ * Reads the database rather than the token: the access token was minted before
+ * the user clicked the link, so its claims cannot carry the new state.
+ */
+export const requireVerifiedEmail: RequestHandler = async (req, _res, next) => {
+  if (!req.auth) {
+    next(AppError.unauthorized("Sign in to continue"));
+    return;
+  }
+
+  const user = await findUserById(req.auth.userId);
+
+  if (!user || user.status !== "ACTIVE") {
+    next(AppError.unauthorized("Your account is not active"));
+    return;
+  }
+
+  if (!user.emailVerifiedAt) {
+    next(
+      new AppError(
+        "EMAIL_NOT_VERIFIED",
+        403,
+        "Confirm your email address to continue",
+      ),
+    );
+    return;
+  }
+
+  next();
+};

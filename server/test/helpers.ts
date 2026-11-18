@@ -2,11 +2,17 @@ import { randomUUID } from "node:crypto";
 import request from "supertest";
 import { prisma } from "../src/db/prisma.js";
 import { ensureRedisConnected, redis } from "../src/db/redis.js";
+import {
+  clearOutbox,
+  readOutbox,
+  type CapturedEmail,
+} from "../src/modules/email/memory.provider.js";
 import { hashPassword } from "../src/modules/auth/password.js";
 
 /**
  * Tests share one database, so each test starts from an empty identity slice
  * and an empty Redis (rate-limit counters and the session denylist included).
+ * The email outbox is cleared for the same reason.
  */
 export async function resetIdentityState(): Promise<void> {
   await prisma.$executeRawUnsafe(
@@ -14,6 +20,7 @@ export async function resetIdentityState(): Promise<void> {
   );
   await ensureRedisConnected();
   await redis.flushdb();
+  clearOutbox();
 }
 
 export function setCookies(response: request.Response): string[] {
@@ -30,6 +37,25 @@ export function refreshCookie(response: request.Response): string | undefined {
   return setCookies(response)
     .find((cookie) => cookie.startsWith("marketplace_refresh="))
     ?.split(";")[0];
+}
+
+/** Most recent email sent to an address, or undefined if none was sent. */
+export function lastEmailTo(email: string): CapturedEmail | undefined {
+  return [...readOutbox()].reverse().find((message) => message.to === email);
+}
+
+/**
+ * Pulls the action token out of the emailed link. The tests follow the link
+ * the way a person would, instead of reading the database.
+ */
+export function tokenFromEmail(message: CapturedEmail): string {
+  const match = message.text.match(/[?&]token=([A-Za-z0-9_-]+)/);
+
+  if (!match) {
+    throw new Error(`No token found in the email "${message.subject}"`);
+  }
+
+  return match[1];
 }
 
 export interface TestUser {

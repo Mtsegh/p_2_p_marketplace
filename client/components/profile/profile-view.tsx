@@ -7,6 +7,7 @@ import { Button, ButtonLink } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/lib/auth";
+import { VerifyEmailBanner } from "./verify-email-banner";
 
 function AccountCard() {
   const router = useRouter();
@@ -79,8 +80,8 @@ function AccountCard() {
 
       {!user.emailVerified ? (
         <p className="mt-6 text-sm text-muted">
-          This address is not confirmed yet. Email verification and account
-          recovery arrive in a later release.
+          This address is not confirmed yet. Use the banner above to resend the
+          link.
         </p>
       ) : null}
 
@@ -127,5 +128,10 @@ export function ProfileView() {
     );
   }
 
-  return <AccountCard />;
+  return (
+    <div className="flex flex-col gap-6">
+      <VerifyEmailBanner />
+      <AccountCard />
+    </div>
+  );
 }

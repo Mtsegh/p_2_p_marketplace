@@ -142,6 +142,17 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
         {...registerField("password")}
       />
 
+      {mode === "login" ? (
+        <p className="-mt-2 text-sm text-muted">
+          <Link
+            href="/forgot-password"
+            className="font-medium text-foreground underline underline-offset-4"
+          >
+            Forgot your password?
+          </Link>
+        </p>
+      ) : null}
+
       <Button type="submit" loading={isSubmitting} className="w-full">
         {copy[mode].submit}
       </Button>
