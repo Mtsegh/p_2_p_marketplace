@@ -45,7 +45,8 @@ Express API (`server/`); each is installed, run, and deployed on its own.
    npm run dev
    ```
 
-   Open <http://localhost:3000>.
+   Open <http://localhost:3000>. The home page shows live API status and
+   reports when the API cannot be reached.
 
 The environment files (`.env`, `.env.local`) hold local secrets and are
 gitignored. Every new environment variable must be added to the matching
