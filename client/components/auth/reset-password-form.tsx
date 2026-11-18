@@ -9,6 +9,7 @@ import { Alert } from "@/components/ui/alert";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { TextField } from "@/components/ui/text-field";
 import { ApiError } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { resetPassword } from "@/lib/auth-api";
 
 const schema = z.object({
@@ -21,6 +22,7 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>;
 
 export function ResetPasswordForm({ token }: { token?: string }) {
+  const { clearSession } = useAuth();
   const [completed, setCompleted] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -42,6 +44,9 @@ export function ResetPasswordForm({ token }: { token?: string }) {
 
     try {
       await resetPassword(token, values.password);
+      // The API revoked every session, so the cached user is stale. Clearing
+      // it now turns the header's "Sign out" into "Sign in" immediately.
+      clearSession();
       setCompleted(true);
     } catch (error) {
       setFormError(

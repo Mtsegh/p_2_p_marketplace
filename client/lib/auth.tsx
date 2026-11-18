@@ -23,6 +23,8 @@ interface AuthContextValue {
   logout: () => Promise<void>;
   /** Writes a user returned by another endpoint into the session cache. */
   syncUser: (user: AuthUser) => void;
+  /** Drops the cached user after the API has already ended the session. */
+  clearSession: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -56,12 +58,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return user;
   }
 
-  async function logout(): Promise<void> {
-    await logoutAccount();
+  function clearSession(): void {
     // Keep the cached entry at `null` instead of removing it: removing an
     // observed query makes it refetch, which would spend a refresh request
     // just to learn there is no session.
     queryClient.setQueryData(SESSION_KEY, null);
+  }
+
+  async function logout(): Promise<void> {
+    await logoutAccount();
+    clearSession();
   }
 
   function syncUser(user: AuthUser): void {
@@ -79,6 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         register,
         logout,
         syncUser,
+        clearSession,
       }}
     >
       {children}
