@@ -11,7 +11,10 @@ import {
   requestEmailChange,
   requestPasswordReset,
   resetPassword,
+  resendPhoneOtp,
+  sendPhoneOtp,
   verifyEmailToken,
+  verifyPhoneOtp,
   type AuthUser,
 } from "./auth-api";
 
@@ -355,5 +358,65 @@ describe("exportAccountData", () => {
 
     expect(url).toContain("/api/v1/auth/account/export");
     expect(init.method).toBeUndefined();
+  });
+});
+
+describe("sendPhoneOtp", () => {
+  it("posts the phone number and returns undefined", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ data: { status: "queued" } }, 202));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      sendPhoneOtp({ phone: "+14155552671" }),
+    ).resolves.toBeUndefined();
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+
+    expect(url).toContain("/api/v1/auth/phone/send");
+    expect(init.method).toBe("POST");
+    expect(init.body).toBe(JSON.stringify({ phone: "+14155552671" }));
+  });
+});
+
+describe("verifyPhoneOtp", () => {
+  it("posts phone and code and returns undefined", async () => {
+    setAccessToken("access-token-9");
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      verifyPhoneOtp({ phone: "+14155552671", code: "123456" }),
+    ).resolves.toBeUndefined();
+
+    expect(getAccessToken()).toBe("access-token-9");
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+
+    expect(url).toContain("/api/v1/auth/phone/verify");
+    expect(init.method).toBe("POST");
+    expect(init.body).toBe(
+      JSON.stringify({ phone: "+14155552671", code: "123456" }),
+    );
+  });
+});
+
+describe("resendPhoneOtp", () => {
+  it("posts the phone number and returns undefined", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ data: { status: "queued" } }, 202));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      resendPhoneOtp({ phone: "+14155552671" }),
+    ).resolves.toBeUndefined();
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+
+    expect(url).toContain("/api/v1/auth/phone/resend");
+    expect(init.method).toBe("POST");
+    expect(init.body).toBe(JSON.stringify({ phone: "+14155552671" }));
   });
 });

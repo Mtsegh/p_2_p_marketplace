@@ -13,6 +13,7 @@ import { AccountData } from "./account-data";
 import { ChangeEmailForm } from "./change-email-form";
 import { ChangePasswordForm } from "./change-password-form";
 import { ProfileForm } from "./profile-form";
+import { PhoneVerificationForm } from "./phone-verification-form";
 import { VerifyEmailBanner } from "./verify-email-banner";
 
 function Section({
@@ -202,6 +203,17 @@ export function ProfileView() {
             </p>
             <div className="mt-4">
               <ChangeEmailForm />
+            </div>
+          </div>
+
+          <div className="border-t border-line pt-6">
+            <h3 className="font-medium">Phone number</h3>
+            <p className="mt-1 text-sm text-muted">
+              Verifying your phone adds a badge to your public profile so other
+              members can see it is confirmed.
+            </p>
+            <div className="mt-4">
+              <PhoneVerificationForm />
             </div>
           </div>
         </div>

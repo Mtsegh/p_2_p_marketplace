@@ -50,6 +50,9 @@ const envSchema = z
         typeof value === "string" && value.trim() === "" ? undefined : value,
       z.string().trim().min(1).optional(),
     ),
+    /** How outbound SMS leaves the process. `console` writes the message to the
+     * log (local development), and `memory` keeps it in an array for tests. */
+    SMS_PROVIDER: z.enum(["console", "memory"]).default("console"),
     EMAIL_FROM_ADDRESS: z
       .string()
       .trim()

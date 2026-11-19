@@ -21,9 +21,13 @@ import {
   loginSchema,
   registerSchema,
   resetPasswordSchema,
+  resendPhoneOtpSchema,
+  sendPhoneOtpSchema,
   sessionParamsSchema,
   verifyEmailSchema,
+  verifyPhoneOtpSchema,
 } from "./auth.schemas.js";
+import * as phone from "./phone.service.js";
 
 function requestContext(req: Request) {
   return {
@@ -186,4 +190,32 @@ export const exportAccount: RequestHandler = async (req, res) => {
 
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
   res.json({ data, meta: { requestId: req.id } });
+};
+
+export const sendPhoneOtp: RequestHandler = async (req, res) => {
+  const input = parseInput(sendPhoneOtpSchema, req.body);
+
+  await phone.sendPhoneOtp(req.auth!.userId, input.phone);
+
+  res
+    .status(202)
+    .json({ data: { status: "queued" }, meta: { requestId: req.id } });
+};
+
+export const verifyPhoneOtp: RequestHandler = async (req, res) => {
+  const input = parseInput(verifyPhoneOtpSchema, req.body);
+
+  await phone.verifyPhoneOtp(req.auth!.userId, input.phone, input.code);
+
+  res.status(204).end();
+};
+
+export const resendPhoneOtp: RequestHandler = async (req, res) => {
+  const input = parseInput(resendPhoneOtpSchema, req.body);
+
+  await phone.resendPhoneOtp(req.auth!.userId, input.phone);
+
+  res
+    .status(202)
+    .json({ data: { status: "queued" }, meta: { requestId: req.id } });
 };

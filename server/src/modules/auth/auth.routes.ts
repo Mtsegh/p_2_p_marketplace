@@ -116,6 +116,20 @@ const exportAccountLimit = rateLimit({
   key: userKey,
 });
 
+const sendPhoneOtpLimit = rateLimit({
+  name: "phone-send-user",
+  limit: 3,
+  windowSeconds: ONE_HOUR,
+  key: userKey,
+});
+
+const verifyPhoneOtpLimit = rateLimit({
+  name: "phone-verify-user",
+  limit: 10,
+  windowSeconds: FIFTEEN_MINUTES,
+  key: userKey,
+});
+
 authRouter.post(
   "/register",
   requireTrustedOrigin,
@@ -207,4 +221,26 @@ authRouter.delete(
   requireAuth,
   deleteAccountLimit,
   controller.deleteAccount,
+);
+
+authRouter.post(
+  "/phone/send",
+  requireTrustedOrigin,
+  requireAuth,
+  sendPhoneOtpLimit,
+  controller.sendPhoneOtp,
+);
+authRouter.post(
+  "/phone/verify",
+  requireTrustedOrigin,
+  requireAuth,
+  verifyPhoneOtpLimit,
+  controller.verifyPhoneOtp,
+);
+authRouter.post(
+  "/phone/resend",
+  requireTrustedOrigin,
+  requireAuth,
+  sendPhoneOtpLimit,
+  controller.resendPhoneOtp,
 );

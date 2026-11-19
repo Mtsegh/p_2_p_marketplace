@@ -64,6 +64,27 @@ export const emailChangeConfirmSchema = z
   .object({ token: actionToken })
   .strict();
 
+const phoneE164 = z
+  .string()
+  .trim()
+  .regex(
+    /^\+[1-9][0-9]{6,14}$/,
+    "Enter a valid phone number (E.164, e.g. +14155552671)",
+  );
+
+const otpCode = z
+  .string()
+  .trim()
+  .regex(/^\d{6}$/, "Enter the 6-digit verification code");
+
+export const sendPhoneOtpSchema = z.object({ phone: phoneE164 }).strict();
+
+export const verifyPhoneOtpSchema = z
+  .object({ phone: phoneE164, code: otpCode })
+  .strict();
+
+export const resendPhoneOtpSchema = z.object({ phone: phoneE164 }).strict();
+
 export const sessionParamsSchema = z
   .object({ sessionId: z.string().uuid("Session id must be a UUID") })
   .strict();

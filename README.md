@@ -204,6 +204,9 @@ The `/profile` page also handles the account itself:
   removed, because later listings, deals, and audit records reference it: the
   email, password, profile text, phone number, sessions, and tokens are cleared
   and the status becomes `DELETED`.
+- Verify phone. A 6-digit code is sent by SMS. Entering it marks the phone as
+  verified and adds a "Phone verified" badge to the public profile. Phone
+  verification is required before accepting a paid deal (chunk 8 rule).
 
 ### Continuous integration
 

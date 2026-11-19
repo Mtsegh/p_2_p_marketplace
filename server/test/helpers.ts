@@ -7,6 +7,13 @@ import {
   readOutbox,
   type CapturedEmail,
 } from "../src/modules/email/memory.provider.js";
+import {
+  clearOutbox as clearSmsOutbox,
+  readOutbox as readSmsOutbox,
+  type CapturedSms,
+} from "../src/modules/sms/memory.provider.js";
+
+export { clearSmsOutbox, readSmsOutbox };
 import { hashPassword } from "../src/modules/auth/password.js";
 
 /**
@@ -21,6 +28,7 @@ export async function resetIdentityState(): Promise<void> {
   await ensureRedisConnected();
   await redis.flushdb();
   clearOutbox();
+  clearSmsOutbox();
 }
 
 export function setCookies(response: request.Response): string[] {
@@ -53,6 +61,22 @@ export function tokenFromEmail(message: CapturedEmail): string {
 
   if (!match) {
     throw new Error(`No token found in the email "${message.subject}"`);
+  }
+
+  return match[1];
+}
+
+/** Most recent SMS sent to a phone number, or undefined if none was sent. */
+export function lastSmsTo(phone: string): CapturedSms | undefined {
+  return [...readSmsOutbox()].reverse().find((message) => message.to === phone);
+}
+
+/** Pulls the 6-digit verification code out of the last SMS to a phone. */
+export function codeFromSms(message: CapturedSms): string {
+  const match = message.body.match(/\b(\d{6})\b/);
+
+  if (!match) {
+    throw new Error(`No verification code found in the SMS "${message.body}"`);
   }
 
   return match[1];

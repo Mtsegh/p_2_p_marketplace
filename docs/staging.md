@@ -72,6 +72,7 @@ Target shape (details land in chunk 30):
 | `EMAIL_FROM_NAME`          | `P2P Marketplace`                                              |
 | `BREVO_API_KEY`            | Brevo API key from Secrets Manager                             |
 | `LOG_LEVEL`                | `info`                                                         |
+| `SMS_PROVIDER`             | `console` in development; a real SMS provider in production    |
 
 ## Verification checklist
 
@@ -92,6 +93,8 @@ Target shape (details land in chunk 30):
       makes the new address the sign-in address.
 - [ ] "Download my data" saves a JSON file with no password hash or token.
 - [ ] Deleting an account signs out every device and removes the public profile.
+- [ ] A member can request a phone verification code by SMS, enter it, and see
+      the "Phone verified" badge on their profile.
 - [ ] Stopping the API shows the error state, and restarting it recovers with
       "Check again".
 - [ ] A pull request runs lint, typecheck, test, and build for both projects.
@@ -103,3 +106,7 @@ the domain above is settled and a verified sender exists.
 
 Chunk 7 finishes the account flows. The email-change message uses the same
 Brevo sender, so it is covered by the same requirement.
+
+Chunk 8 adds phone verification. SMS delivery uses `SMS_PROVIDER=console`
+in development (codes appear in the API log). Staging needs a real SMS
+provider configured before the phone flows can be exercised end to end.

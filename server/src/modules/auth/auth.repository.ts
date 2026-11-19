@@ -129,10 +129,15 @@ export function revokeAllUserSessions(userId: string) {
 
 export interface CreateAuthTokenInput {
   userId: string;
-  type: "EMAIL_VERIFY" | "PASSWORD_RESET" | "EMAIL_CHANGE";
+  type:
+    | "EMAIL_VERIFY"
+    | "PASSWORD_RESET"
+    | "EMAIL_CHANGE"
+    | "PHONE_VERIFY";
   tokenHash: string;
   expiresAt: Date;
-  /** Token-specific data, such as the pending address of an EMAIL_CHANGE. */
+  /** Token-specific data, such as the pending address of an EMAIL_CHANGE or
+   * the phone number of a PHONE_VERIFY token. */
   payload?: Prisma.InputJsonValue;
 }
 
@@ -256,5 +261,50 @@ export function listUsers({ q, limit, cursor }: ListUsersInput) {
     take: limit + 1,
     include: { profile: true },
     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+  });
+}
+
+/**
+ * Finds an unused, non-expired phone OTP token for a specific user. The user
+ * id is part of the lookup because six-digit codes collide across accounts.
+ */
+export function findPhoneOtp(
+  tokenHash: string,
+  userId: string,
+) {
+  return prisma.authToken.findFirst({
+    where: { tokenHash, type: "PHONE_VERIFY", userId },
+  });
+}
+
+/**
+ * Consumes the OTP token and marks the phone as verified in one transaction.
+ * The single-use `updateMany` guard prevents two submissions from verifying
+ * the same code twice.
+ */
+export function consumePhoneOtpAndVerifyPhone(
+  tokenId: string,
+  userId: string,
+  phoneE164: string,
+) {
+  return prisma.$transaction(async (tx) => {
+    const consumed = await tx.authToken.updateMany({
+      where: {
+        id: tokenId,
+        userId,
+        usedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+      data: { usedAt: new Date() },
+    });
+
+    if (consumed.count === 0) {
+      return null;
+    }
+
+    return tx.user.update({
+      where: { id: userId },
+      data: { phoneE164, phoneVerifiedAt: new Date() },
+    });
   });
 }

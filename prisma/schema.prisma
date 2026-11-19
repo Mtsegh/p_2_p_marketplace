@@ -35,6 +35,7 @@ enum AuthTokenType {
   EMAIL_VERIFY
   PASSWORD_RESET
   EMAIL_CHANGE
+  PHONE_VERIFY
 }
 
 /// Account and credential record. Public profile data lives in `Profile` (chunk 7).

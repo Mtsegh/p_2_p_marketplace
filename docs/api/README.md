@@ -178,7 +178,8 @@ is treated as token theft and the whole token family is revoked.
 | `EMAIL_ALREADY_VERIFIED` | 409    | Resending a confirmation for an address that is already confirmed                                   |
 | `EMAIL_NOT_VERIFIED`     | 403    | The action needs a confirmed address                                                                |
 | `INVALID_PASSWORD`       | 400    | The current password supplied to a settings action is wrong                                         |
-| `INVALID_TOKEN`          | 400    | Email verification, password reset, or email change token is unknown, expired, or already used      |
+| `INVALID_TOKEN`          | 400    | Email verification, password reset, email change, or phone verification token is unknown, expired, or already used |
+| `PHONE_ALREADY_VERIFIED` | 409    | The phone number is already verified on this account                                                |
 | `UNAUTHENTICATED`        | 401    | Missing, malformed, or expired access token; or no refresh cookie on refresh                        |
 | `INVALID_REFRESH_TOKEN`  | 401    | Refresh cookie is unknown, revoked, or expired                                                      |
 | `FORBIDDEN`              | 403    | Authenticated but the role is not allowed                                                           |
@@ -204,6 +205,9 @@ is treated as token theft and the whole token family is revoked.
 | `DELETE /auth/account`           | per user                                          | 3 per hour                            |
 | `PATCH /profiles/me`             | per user                                          | 30 per hour                           |
 | `GET /profiles/:userId`          | per IP                                            | 120 per 15 minutes                    |
+| `POST /auth/phone/send`          | per user                                          | 3 per hour                            |
+| `POST /auth/phone/verify`        | per user                                          | 10 per 15 minutes                     |
+| `POST /auth/phone/resend`        | per user                                          | 3 per hour                            |
 
 The limiter uses Redis. If Redis is unavailable the limiter fails open and logs
 a warning: a cache outage must not lock everyone out of signing in.
@@ -492,6 +496,42 @@ deals, and audit records can still reference it; the email becomes
 value, the status becomes `DELETED`, the profile fields are cleared, and every
 session and action token is removed. `400 INVALID_PASSWORD` when the password is
 wrong. The response clears the refresh cookie.
+
+### `POST /api/v1/auth/phone/send`
+
+Requires `Authorization` and a trusted `Origin`. Body:
+
+| Field  | Rules                                                                  |
+| ------ | ---------------------------------------------------------------------- |
+| `phone`| E.164 format (`+` followed by country code and 7 to 15 digits)         |
+
+`202` with `{ "data": { "status": "queued" } }`. A 6-digit code is sent to the
+number by SMS. `409 PHONE_ALREADY_VERIFIED` when the number is already
+verified. `422` when the number fails the E.164 check.
+
+### `POST /api/v1/auth/phone/verify`
+
+Requires `Authorization` and a trusted `Origin`. Body:
+
+| Field  | Rules           |
+| ------ | --------------- |
+| `phone`| E.164 phone number |
+| `code` | Exactly 6 digits |
+
+`204` on success. The phone number is written to the account and marked
+verified. `400 INVALID_TOKEN` for an unknown, expired, or already-spent code,
+or when the number does not match the pending token.
+
+### `POST /api/v1/auth/phone/resend`
+
+Requires `Authorization` and a trusted `Origin`. Body:
+
+| Field  | Rules                                                                  |
+| ------ | ---------------------------------------------------------------------- |
+| `phone`| E.164 phone number |
+
+`202` with `{ "data": { "status": "queued" } }`. Sends a fresh code and
+replaces the pending token, just like `send`.
 
 ### `GET /api/v1/admin/users`
 

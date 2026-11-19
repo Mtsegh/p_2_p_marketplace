@@ -186,6 +186,29 @@ export async function confirmEmailChange(
 }
 
 /**
+ * Starts phone verification. The API sends a 6-digit code to the given E.164
+ * number; verifying it marks the phone as confirmed on the account.
+ */
+export async function sendPhoneOtp(input: { phone: string }): Promise<void> {
+  await apiRequestJson<null>("/api/v1/auth/phone/send", "POST", input);
+}
+
+/** Completes phone verification with the 6-digit code. */
+export async function verifyPhoneOtp(input: {
+  phone: string;
+  code: string;
+}): Promise<void> {
+  await apiRequestJson<null>("/api/v1/auth/phone/verify", "POST", input);
+}
+
+/**
+ * Resends a phone verification code to the same number as the pending token.
+ */
+export async function resendPhoneOtp(input: { phone: string }): Promise<void> {
+  await apiRequestJson<null>("/api/v1/auth/phone/resend", "POST", input);
+}
+
+/**
  * Anonymizes the account and ends every session. The API clears the refresh
  * cookie, and the access token is dropped here so the UI immediately becomes
  * signed out.

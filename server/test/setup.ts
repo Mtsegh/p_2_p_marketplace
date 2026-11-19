@@ -21,6 +21,8 @@ process.env.ACCESS_TOKEN_TTL_SECONDS ??= "900";
 process.env.REFRESH_TOKEN_TTL_DAYS ??= "30";
 // Memory provider: the suite reads the emails instead of delivering them.
 process.env.EMAIL_PROVIDER = "memory";
+// Memory provider: the suite reads SMS codes instead of delivering them.
+process.env.SMS_PROVIDER = "memory";
 
 /**
  * Close handles between files so Vitest can exit. Redis is disconnected rather

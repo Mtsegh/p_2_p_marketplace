@@ -45,3 +45,7 @@ export const PASSWORD_RESET_TTL_MS = HOUR_MS;
  * address, so the window is short: the address being proven is the whole point.
  */
 export const EMAIL_CHANGE_TTL_MS = HOUR_MS;
+
+/** Short on purpose: a phone code is only six digits, so rate limiting plus a
+ * brief window are the whole security model. */
+export const PHONE_VERIFY_TTL_MS = 10 * 60_000;
