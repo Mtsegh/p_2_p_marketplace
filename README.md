@@ -208,6 +208,22 @@ The `/profile` page also handles the account itself:
   verified and adds a "Phone verified" badge to the public profile. Phone
   verification is required before accepting a paid deal (chunk 8 rule).
 
+### Listings
+
+Listings let members offer items for sale or exchange. The server (`POST
+/api/v1/listings`) creates a draft listing; publishing it (`POST
+/api/v1/listings/:id/publish`) makes it visible to other members at `GET
+/api/v1/listings`. Listings carry a title, description, condition, optional
+price (cents), listing type (sale, exchange, or both), optional category, and
+location. Only the owner can edit or delete a listing, and a listing that is
+part of an active deal cannot be changed.
+
+Public pages:
+- `/browse` — listing grid with filters and pagination
+- `/sell` — create a draft listing (requires verified email)
+- `/users/<id>` — public profile with initials avatar and verified badges
+
+
 ### Continuous integration
 
 `.github/workflows/ci.yml` runs lint, typecheck, test, and build for both

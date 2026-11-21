@@ -110,3 +110,9 @@ Brevo sender, so it is covered by the same requirement.
 Chunk 8 adds phone verification. SMS delivery uses `SMS_PROVIDER=console`
 in development (codes appear in the API log). Staging needs a real SMS
 provider configured before the phone flows can be exercised end to end.
+
+Chunk 9 adds listings and categories. Members can create draft listings,
+publish them, edit or delete their own listings, and browse public listings
+with filters and pagination. The sell page at `/sell` requires a verified
+email address.
+

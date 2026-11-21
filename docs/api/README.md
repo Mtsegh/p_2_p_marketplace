@@ -208,6 +208,14 @@ is treated as token theft and the whole token family is revoked.
 | `POST /auth/phone/send`          | per user                                          | 3 per hour                            |
 | `POST /auth/phone/verify`        | per user                                          | 10 per 15 minutes                     |
 | `POST /auth/phone/resend`        | per user                                          | 3 per hour                            |
+| `POST /listings`                 | per user                                          | 10 per hour                           |
+| `PATCH /listings/:listingId`     | per user                                          | 20 per hour                           |
+| `DELETE /listings/:listingId`    | per user                                          | 20 per hour                           |
+| `POST /listings/:listingId/publish`| per user                                        | 20 per hour                           |
+| `GET /listings`                  | per IP                                            | 120 per 15 minutes                    |
+| `GET /listings/:listingId`       | per IP                                            | 60 per 15 minutes                     |
+| `GET /listings/categories`       | per IP                                            | 60 per 15 minutes                     |
+| `POST /listings/categories`      | per user (admin)                                  | 10 per hour                           |
 
 The limiter uses Redis. If Redis is unavailable the limiter fails open and logs
 a warning: a cache outage must not lock everyone out of signing in.
@@ -532,6 +540,99 @@ Requires `Authorization` and a trusted `Origin`. Body:
 
 `202` with `{ "data": { "status": "queued" } }`. Sends a fresh code and
 replaces the pending token, just like `send`.
+
+## Listings
+
+Listings are items a member offers for sale or exchange. A listing starts as a
+`draft` and must be published to become visible to other members. Only the
+listing owner can edit or delete it, and a listing that is part of an active
+deal (reserved, sold, or exchanged) cannot be changed.
+
+Listings require a verified email address to create, but anyone can browse
+published listings without signing in.
+
+### `POST /api/v1/listings`
+
+Requires `Authorization`, a verified email, and a trusted `Origin`. Body:
+
+| Field         | Rules                                                                       |
+| ------------- | --------------------------------------------------------------------------- |
+| `title`       | 1 to 200 characters after trimming                                          |
+| `description` | 1 to 2000 characters after trimming                                         |
+| `condition`   | `NEW`, `LIKE_NEW`, `GOOD`, `FAIR`, or `POOR` (default `GOOD`)               |
+| `priceCents`  | whole cents ≥ 0 (required when `listingType` is `SALE` or `BOTH`)           |
+| `listingType` | `SALE`, `EXCHANGE`, or `BOTH` (default `BOTH`)                              |
+| `categoryId`  | optional UUID of an existing category                                       |
+| `location`    | 1 to 200 characters after trimming                                          |
+
+`201` with `{ "data": { "listing": <ListingDto> } }`. The listing is created as
+a draft.
+
+`422 PRICE_REQUIRED` when a sale or both listing has no price.
+
+### `GET /api/v1/listings`
+
+Public; no session required. Query params:
+
+| Field       | Rules                                                        |
+| ----------- | ------------------------------------------------------------ |
+| `category`  | optional category UUID                                       |
+| `condition` | optional `NEW`, `LIKE_NEW`, `GOOD`, `FAIR`, `POOR`           |
+| `listingType` | optional `SALE`, `EXCHANGE`, `BOTH`                         |
+| `minPrice`  | optional whole cents ≥ 0                                     |
+| `maxPrice`  | optional whole cents ≥ 0                                     |
+| `q`         | optional keyword search (title or description), ≤ 200 chars  |
+| `status`    | optional listing status filter                               |
+| `limit`     | 1 to 100, default 20                                         |
+| `cursor`    | optional UUID cursor for pagination                          |
+
+`200` with `{ "data": { "listings": [<ListingDto>], "nextCursor": "..." } }`.
+Only `ACTIVE` listings are returned. `nextCursor` is null on the last page.
+
+### `GET /api/v1/listings/:listingId`
+
+Public; no session required. `200` with `{ "data": { "listing": <ListingDto> } }`.
+`404` if missing or not visible.
+
+### `PATCH /api/v1/listings/:listingId`
+
+Requires `Authorization`, a trusted `Origin`, and ownership. Body: at least one
+of the fields above. `200` with the updated listing.
+
+`403 FORBIDDEN` if not the owner. `409 LISTING_IN_DEAL` if the listing is part
+of an active deal.
+
+### `DELETE /api/v1/listings/:listingId`
+
+Requires `Authorization`, a trusted `Origin`, and ownership. `204` on success.
+
+`403 FORBIDDEN` if not the owner. `409 LISTING_IN_DEAL` if the listing is part
+of an active deal.
+
+### `POST /api/v1/listings/:listingId/publish`
+
+Requires `Authorization`, a trusted `Origin`, and ownership. `200` with the
+published listing. Changes status from `DRAFT` to `ACTIVE`.
+
+### `GET /api/v1/listings/categories`
+
+Public; no session required. `200` with:
+
+```json
+{ "data": { "categories": [{ "id": "...", "name": "...", "slug": "...", "activeListingCount": 5 }] } }
+```
+
+### `POST /api/v1/listings/categories`
+
+Requires `Authorization`, `ADMIN` role, and a trusted `Origin`. Body:
+
+| Field | Rules                                                        |
+| ----- | ------------------------------------------------------------ |
+| `name`| 1 to 100 characters after trimming                           |
+| `slug`| 1 to 100 lowercase alphanumeric + hyphens, e.g. `electronics`|
+
+`201` with `{ "data": { "category": <CategoryDto> } }`. `409` if the slug is
+already in use.
 
 ### `GET /api/v1/admin/users`
 

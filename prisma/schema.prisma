@@ -5,8 +5,8 @@
 //
 // Scope: the identity slice needed by Phases 1 and 2. `PhoneOtp` (chunk 8) is
 // added with its own migration when that chunk lands. `Profile` arrived with
-// chunk 7, which also uses the pre-existing `AuthTokenType.EMAIL_CHANGE` and
-// `UserStatus.DELETED` values.
+// chunk 7. Listings, categories, and listing lifecycle states arrive with
+// chunk 9.
 
 generator client {
   provider            = "prisma-client"
@@ -55,6 +55,7 @@ model User {
   sessions   Session[]
   authTokens AuthToken[]
   profile    Profile?
+  listings   Listing[]
 
   @@map("users")
 }
@@ -118,4 +119,75 @@ model AuthToken {
   @@index([userId, type])
   @@index([expiresAt])
   @@map("auth_tokens")
+}
+
+/// How a listing can be transacted: sale for money, exchange for other
+/// listings, or both.
+enum ListingType {
+  SALE
+  EXCHANGE
+  BOTH
+}
+
+/// The condition of the listed item, chosen by the seller.
+enum ListingCondition {
+  NEW
+  LIKE_NEW
+  GOOD
+  FAIR
+  POOR
+}
+
+/// The lifecycle state of a listing. Drafts are invisible to other members;
+/// active listings can receive proposals; reserved/sold/exchanged/removed are
+/// terminal or intermediate deal states.
+enum ListingStatus {
+  DRAFT
+  ACTIVE
+  RESERVED
+  SOLD
+  EXCHANGED
+  REMOVED
+}
+
+/// A category groups similar listings (e.g. "Electronics", "Furniture").
+/// Slugs are unique and used in URLs and filters.
+model Category {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @map("name") @db.VarChar(100)
+  slug      String   @unique @map("slug") @db.VarChar(100)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  listings Listing[]
+
+  @@map("categories")
+}
+
+/// An item a member offers for sale or exchange. Owned by one user, optionally
+/// categorized, and always in one of the explicit lifecycle statuses.
+model Listing {
+  id          String        @id @default(uuid()) @db.Uuid
+  ownerId     String        @map("owner_id") @db.Uuid
+  categoryId  String?       @map("category_id") @db.Uuid
+  title       String        @map("title") @db.VarChar(200)
+  description String        @map("description") @db.Text
+  condition   ListingCondition @default(GOOD) @map("condition")
+  priceCents  Int?          @map("price_cents") // Nullable: exchange-only listings have no price
+  listingType ListingType   @default(BOTH) @map("listing_type")
+  status      ListingStatus @default(DRAFT) @map("status")
+  location    String        @map("location") @db.VarChar(200)
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  owner    User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([ownerId])
+  @@index([categoryId])
+  @@index([status])
+  @@index([listingType])
+  @@index([condition])
+  @@index([createdAt])
+  @@map("listings")
 }

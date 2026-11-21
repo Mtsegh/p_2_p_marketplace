@@ -23,7 +23,7 @@ import { hashPassword } from "../src/modules/auth/password.js";
  */
 export async function resetIdentityState(): Promise<void> {
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "auth_tokens", "sessions", "users" RESTART IDENTITY CASCADE',
+    'TRUNCATE TABLE "auth_tokens", "sessions", "users", "listings", "categories" RESTART IDENTITY CASCADE',
   );
   await ensureRedisConnected();
   await redis.flushdb();
