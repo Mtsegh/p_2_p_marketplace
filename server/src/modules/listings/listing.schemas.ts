@@ -89,22 +89,28 @@ export const listListingsQuerySchema = z
     listingType: z
       .enum(["SALE", "EXCHANGE", "BOTH"])
       .optional(),
-    minPrice: z
+    minPrice: z.coerce
       .number()
       .int()
       .min(0)
       .optional(),
-    maxPrice: z
+    maxPrice: z.coerce
       .number()
       .int()
       .min(0)
       .optional(),
     q: z.string().trim().max(200).optional(),
+    location: z.string().trim().max(200).optional(),
+    sort: z
+      .enum(["newest", "price_asc", "price_desc", "relevance"])
+      .default("newest"),
     status: z
       .enum(["DRAFT", "ACTIVE", "RESERVED", "SOLD", "EXCHANGED", "REMOVED"])
       .optional(),
     limit: z.coerce.number().int().min(1).max(100).default(20),
-    cursor: z.string().uuid().optional(),
+    // Opaque pagination token (base64-encoded offset). Not an id: with
+    // relevance/price sorting an id alone cannot locate the next page.
+    cursor: z.string().max(256).optional(),
   })
   .strict();
 

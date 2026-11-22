@@ -49,6 +49,7 @@ export interface Category {
 export interface ListListingsResult {
   listings: Listing[];
   nextCursor: string | null;
+  total: number;
 }
 
 export interface CreateListingInput {
@@ -79,6 +80,8 @@ export interface ListListingsQuery {
   minPrice?: number;
   maxPrice?: number;
   q?: string;
+  location?: string;
+  sort?: "newest" | "price_asc" | "price_desc" | "relevance";
   status?: ListingStatus;
   limit?: number;
   cursor?: string;
@@ -111,6 +114,8 @@ export async function fetchListings(
   if (query.maxPrice !== undefined)
     params.set("maxPrice", String(query.maxPrice));
   if (query.q) params.set("q", query.q);
+  if (query.location) params.set("location", query.location);
+  if (query.sort) params.set("sort", query.sort);
   if (query.status) params.set("status", query.status);
   if (query.limit !== undefined) params.set("limit", String(query.limit));
   if (query.cursor) params.set("cursor", query.cursor);

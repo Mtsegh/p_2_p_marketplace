@@ -108,6 +108,9 @@ Target shape (details land in chunk 30):
 - [ ] A guest can browse `/browse`, use "Load more" to reach the end without
       skipped listings, and open a detail page at `/listings/<id>` with a seller
       card, gallery, and SEO title/description.
+- [ ] A keyword plus filters (category, condition, type, price, location, sort)
+      returns correct results, the URL can be shared and restored with the back
+      button, and the result count matches the filters.
 - [ ] Stopping the API shows the error state, and restarting it recovers with
       "Check again".
 - [ ] A pull request runs lint, typecheck, test, and build for both projects.
@@ -138,4 +141,9 @@ to buyers.
 
 Chunk 11 adds the public browse feed and listing detail pages. Both work for
 signed-out guests and need no extra credentials beyond the storage bucket above.
+
+Chunk 12 adds search and filtering. `20261123000000_add_listing_search` enables
+the `pg_trgm` extension, a generated tsvector column, and GIN/btree indexes; the
+migration runs as a deploy step like all others, so no manual database setup is
+needed.
 

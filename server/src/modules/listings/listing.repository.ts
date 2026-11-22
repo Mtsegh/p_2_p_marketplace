@@ -1,3 +1,4 @@
+import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../db/prisma.js";
 import type {
   ListingCondition,
@@ -5,6 +6,7 @@ import type {
   ListingType,
 } from "../../generated/prisma/client.js";
 import type { ListListingsQuery } from "./listing.schemas.js";
+import type { ListingWithRelations } from "./listing.dto.js";
 
 /**
  * Every listing read includes the same relations so `toListingDto` can always
@@ -112,48 +114,156 @@ export function deleteListing(listingId: string) {
 }
 
 /**
- * Lists active (publicly visible) listings with cursor-based pagination and
- * optional filters. Only listings with status ACTIVE are returned to the
- * public; drafts, reserved, sold, exchanged, and removed listings are hidden
- * unless the caller is the owner (handled in the service layer).
+ * Opaque pagination token. Encodes the sort key of the last row on the page so
+ * the next request can resume at the right position for ANY sort. An id alone
+ * is not enough when ordering by price or full-text rank.
  */
-export function listActiveListings(query: ListListingsQuery) {
-  const where = {
-    status: "ACTIVE" as ListingStatus,
-    ...(query.category ? { categoryId: query.category } : {}),
-    ...(query.condition ? { condition: query.condition } : {}),
-    ...(query.listingType ? { listingType: query.listingType } : {}),
-    ...(query.q
-      ? {
-          OR: [
-            { title: { contains: query.q, mode: "insensitive" as const } },
-            {
-              description: {
-                contains: query.q,
-                mode: "insensitive" as const,
-              },
-            },
-          ],
-        }
-      : {}),
-    ...(query.minPrice !== undefined || query.maxPrice !== undefined
-      ? {
-          priceCents: {
-            ...(query.minPrice !== undefined ? { gte: query.minPrice } : {}),
-            ...(query.maxPrice !== undefined ? { lte: query.maxPrice } : {}),
-          },
-        }
-      : {}),
-  };
+interface SearchCursor {
+  s: number; // sort key value
+  i: string; // listing id, the tiebreaker
+}
 
-  return prisma.listing.findMany({
-    where,
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    take: query.limit + 1,
-    cursor: query.cursor ? { id: query.cursor } : undefined,
-    skip: query.cursor ? 1 : 0,
-    include: LISTING_INCLUDE,
-  });
+function encodeCursor(cursor: SearchCursor): string {
+  return Buffer.from(JSON.stringify(cursor)).toString("base64url");
+}
+
+function decodeCursor(token?: string): SearchCursor | null {
+  if (!token) return null;
+
+  try {
+    const value = JSON.parse(
+      Buffer.from(token, "base64url").toString("utf8"),
+    ) as SearchCursor;
+
+    if (
+      typeof value?.s === "number" &&
+      Number.isFinite(value.s) &&
+      typeof value?.i === "string"
+    ) {
+      return value;
+    }
+  } catch {
+    // A malformed cursor simply starts from the beginning.
+  }
+
+  return null;
+}
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export interface ListActiveResult {
+  listings: ListingWithRelations[];
+  nextCursor: string | null;
+  total: number;
+}
+
+/**
+ * Lists active (publicly visible) listings with full-text search, filters,
+ * sorting, and keyset pagination. Prisma 7 cannot express `@@` in its generated
+ * types, so the matching ids and sort keys come from a fully parameterized raw
+ * SQL query; the page is then hydrated through Prisma so the DTO mapping still
+ * gets owner/category/images relations.
+ */
+export async function listActiveListings(
+  query: ListListingsQuery,
+): Promise<ListActiveResult> {
+  const conditions: Prisma.Sql[] = [Prisma.sql`l.status = 'ACTIVE'`];
+
+  // category may be a UUID (current client) or a slug (pretty URL).
+  if (query.category) {
+    conditions.push(
+      UUID_RE.test(query.category)
+        ? Prisma.sql`l.category_id = ${query.category}::uuid`
+        : Prisma.sql`l.category_id IN (SELECT id FROM categories WHERE slug = ${query.category})`,
+    );
+  }
+  if (query.condition) {
+    conditions.push(Prisma.sql`l.condition::text = ${query.condition}`);
+  }
+  if (query.listingType) {
+    conditions.push(Prisma.sql`l.listing_type::text = ${query.listingType}`);
+  }
+  if (query.minPrice !== undefined) {
+    conditions.push(Prisma.sql`l.price_cents >= ${query.minPrice}`);
+  }
+  if (query.maxPrice !== undefined) {
+    conditions.push(Prisma.sql`l.price_cents <= ${query.maxPrice}`);
+  }
+  if (query.location) {
+    // pg_trgm index backs this leading-wildcard ILIKE.
+    conditions.push(Prisma.sql`l.location ILIKE '%' || ${query.location} || '%'`);
+  }
+  if (query.q) {
+    // Full-text match on the indexed tsvector, plus ILIKE so partial words
+    // ("cam" -> "camera") still return results, backed by trgm indexes.
+    conditions.push(Prisma.sql`(
+      l.search_vector @@ websearch_to_tsquery('english', ${query.q})
+      OR l.title ILIKE '%' || ${query.q} || '%'
+      OR l.description ILIKE '%' || ${query.q} || '%'
+    )`);
+  }
+
+  const where = Prisma.join(conditions, " AND ");
+
+  const ascending = query.sort === "price_asc";
+  const direction = ascending ? Prisma.raw("ASC") : Prisma.raw("DESC");
+
+  // A single numeric sort key for every sort mode keeps the keyset predicate
+  // uniform. Null prices sort last in both directions.
+  const sortKey =
+    query.sort === "price_asc"
+      ? Prisma.sql`COALESCE(l.price_cents, 2147483647)::float8`
+      : query.sort === "price_desc"
+        ? Prisma.sql`COALESCE(l.price_cents, -1)::float8`
+        : query.sort === "relevance"
+          ? Prisma.sql`ts_rank(l.search_vector, websearch_to_tsquery('english', ${query.q ?? ""}))::float8`
+          : Prisma.sql`EXTRACT(EPOCH FROM l.created_at)::float8`;
+
+  const cursor = decodeCursor(query.cursor);
+  const keyset = cursor
+    ? Prisma.sql`(${sortKey}, l.id) ${ascending ? Prisma.raw(">") : Prisma.raw("<")} (${cursor.s}::float8, ${cursor.i}::uuid)`
+    : Prisma.sql`TRUE`;
+
+  const rows = await prisma.$queryRaw<Array<{ id: string; sortkey: number }>>(
+    Prisma.sql`
+      SELECT l.id::text AS id, ${sortKey} AS sortkey
+      FROM listings l
+      WHERE ${where} AND ${keyset}
+      ORDER BY ${sortKey} ${direction}, l.id ${direction}
+      LIMIT ${query.limit + 1}
+    `,
+  );
+
+  const countRows = await prisma.$queryRaw<Array<{ count: bigint }>>(
+    Prisma.sql`SELECT COUNT(*)::bigint AS count FROM listings l WHERE ${where}`,
+  );
+  const total = Number(countRows[0]?.count ?? 0n);
+
+  const hasMore = rows.length > query.limit;
+  const pageRows = hasMore ? rows.slice(0, query.limit) : rows;
+  const ids = pageRows.map((row) => row.id);
+
+  let listings: ListingWithRelations[] = [];
+
+  if (ids.length > 0) {
+    const found = await prisma.listing.findMany({
+      where: { id: { in: ids } },
+      include: LISTING_INCLUDE,
+    });
+    const byId = new Map(found.map((listing) => [listing.id, listing]));
+    listings = ids
+      .map((id) => byId.get(id))
+      .filter(Boolean) as ListingWithRelations[];
+  }
+
+  const last = pageRows[pageRows.length - 1];
+  const nextCursor =
+    hasMore && last
+      ? encodeCursor({ s: Number(last.sortkey), i: last.id })
+      : null;
+
+  return { listings, nextCursor, total };
 }
 
 /**

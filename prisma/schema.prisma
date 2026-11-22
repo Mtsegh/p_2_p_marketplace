@@ -184,12 +184,17 @@ model Listing {
   owner    User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
+  /// Full-text search vector maintained by PostgreSQL (see migration). Kept as
+  /// Unsupported so Prisma does not try to manage the generated column.
+  searchVector Unsupported("tsvector")? @map("search_vector")
+
   @@index([ownerId])
   @@index([categoryId])
   @@index([status])
   @@index([listingType])
   @@index([condition])
   @@index([createdAt])
+  @@index([priceCents])
   @@map("listings")
 }
 

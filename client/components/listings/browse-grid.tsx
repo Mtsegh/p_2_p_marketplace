@@ -4,26 +4,40 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import {
+  filtersToQuery,
+  filtersKey,
+  type BrowseFilters,
+} from "@/lib/browse-filters";
 import { fetchListings, type ListListingsResult } from "@/lib/listings-api";
 import { ListingCard } from "./listing-card";
 
 const PAGE_SIZE = 12;
 
 /**
- * Client-side pagination for the public browse feed. The first page is fetched
- * by the server for a fast first paint, then this component takes over: "Load
- * more" appends the next cursor page without a navigation, so scroll position
- * is preserved.
+ * Client-side pagination for the public browse feed. The query key includes the
+ * active filters, so changing a filter resets to that search's first page. The
+ * server supplies the first page for a fast first paint; "Load more" appends
+ * the next cursor page without a navigation, preserving scroll position.
  */
 export function BrowseGrid({
   initialPage,
+  filters,
 }: {
   initialPage: ListListingsResult;
+  filters: BrowseFilters;
 }) {
+  const key = filtersKey(filters);
+
   const query = useInfiniteQuery({
-    queryKey: ["listings", "browse"],
+    queryKey: ["listings", "browse", key],
     queryFn: ({ pageParam }) =>
-      fetchListings({ cursor: pageParam, limit: PAGE_SIZE }),
+      fetchListings({
+        ...filtersToQuery(filters, {
+          limit: PAGE_SIZE,
+          cursor: pageParam,
+        }),
+      }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     initialData: {
@@ -33,18 +47,23 @@ export function BrowseGrid({
   });
 
   const listings = query.data.pages.flatMap((page) => page.listings);
+  const total = query.data.pages[0]?.total ?? 0;
 
   if (listings.length === 0) {
     return (
       <EmptyState
-        title="No listings yet"
-        description="Listings will appear here as sellers publish them. Be the first to put something up."
+        title="No listings found"
+        description="Try changing or clearing your filters to see more items."
       />
     );
   }
 
   return (
     <div className="flex flex-col gap-6">
+      <p className="text-sm text-muted" role="status">
+        {listings.length} of {total} {total === 1 ? "listing" : "listings"}
+      </p>
+
       <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {listings.map((listing) => (
           <li key={listing.id}>

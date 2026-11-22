@@ -133,3 +133,126 @@ describe("GET /api/v1/listings/:listingId", () => {
       .expect(404);
   });
 });
+
+describe("GET /api/v1/listings search and filters", () => {
+  async function seedListings() {
+    const user = await registerUser(app);
+    const electronics = await prisma.category.create({
+      data: { name: "Electronics", slug: "electronics" },
+    });
+
+    await prisma.listing.createMany({
+      data: [
+        {
+          ownerId: user.id,
+          title: "Vintage camera",
+          description: "A film camera in good condition",
+          location: "Lagos",
+          categoryId: electronics.id,
+          priceCents: 45000,
+          status: "ACTIVE",
+        },
+        {
+          ownerId: user.id,
+          title: "Mountain bike",
+          description: "Great for trails",
+          location: "Abuja",
+          priceCents: 12000,
+          status: "ACTIVE",
+        },
+        {
+          ownerId: user.id,
+          title: "Draft camera",
+          description: "Not published yet",
+          location: "Lagos",
+          status: "DRAFT",
+        },
+      ],
+    });
+  }
+
+  it("matches by keyword via full-text search", async () => {
+    await seedListings();
+
+    const response = await request(app)
+      .get("/api/v1/listings")
+      .query({ q: "camera" })
+      .expect(200);
+
+    expect(response.body.data.total).toBe(1);
+    expect(response.body.data.listings[0].title).toBe("Vintage camera");
+  });
+
+  it("matches partial keywords via trigram search", async () => {
+    await seedListings();
+
+    const response = await request(app)
+      .get("/api/v1/listings")
+      .query({ q: "cam" })
+      .expect(200);
+
+    expect(response.body.data.total).toBe(1);
+  });
+
+  it("filters by location", async () => {
+    await seedListings();
+
+    const response = await request(app)
+      .get("/api/v1/listings")
+      .query({ location: "abu" })
+      .expect(200);
+
+    expect(response.body.data.total).toBe(1);
+    expect(response.body.data.listings[0].title).toBe("Mountain bike");
+  });
+
+  it("filters by category slug", async () => {
+    await seedListings();
+
+    const response = await request(app)
+      .get("/api/v1/listings")
+      .query({ category: "electronics" })
+      .expect(200);
+
+    expect(response.body.data.total).toBe(1);
+  });
+
+  it("sorts by price ascending", async () => {
+    await seedListings();
+
+    const response = await request(app)
+      .get("/api/v1/listings")
+      .query({ sort: "price_asc" })
+      .expect(200);
+
+    const prices = response.body.data.listings.map(
+      (item: { priceCents: number }) => item.priceCents,
+    );
+    expect(prices).toEqual([...prices].sort((a, b) => a - b));
+  });
+
+  it("filters by price range", async () => {
+    await seedListings();
+
+    const response = await request(app)
+      .get("/api/v1/listings")
+      .query({ minPrice: 20000, maxPrice: 50000 })
+      .expect(200);
+
+    expect(response.body.data.total).toBe(1);
+    expect(response.body.data.listings[0].title).toBe("Vintage camera");
+  });
+
+  it("reports the total matching count before pagination", async () => {
+    await seedListings();
+
+    const response = await request(app)
+      .get("/api/v1/listings")
+      .query({ limit: 1 })
+      .expect(200);
+
+    expect(response.body.data.listings).toHaveLength(1);
+    expect(response.body.data.total).toBe(2);
+    expect(response.body.data.nextCursor).not.toBeNull();
+  });
+});

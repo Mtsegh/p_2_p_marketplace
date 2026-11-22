@@ -108,4 +108,6 @@ export function toCategoryDto(category: Category): CategoryDto {
 export interface ListListingsResult {
   listings: ListingDto[];
   nextCursor: string | null;
+  /** Total number of listings matching the current filters (before pagination). */
+  total: number;
 }

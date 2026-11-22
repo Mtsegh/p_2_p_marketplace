@@ -240,6 +240,15 @@ Each listing has a detail page at `/listings/<id>` with an image gallery
 seller trust card, and similar items from the same category. Both pages set SEO
 metadata (title, description, and an Open Graph image on the detail page).
 
+The browse feed supports full-text keyword search plus category, condition,
+listing type, price range, and location filters, and sorting by newest, price,
+or relevance. Search uses PostgreSQL `tsvector` (GIN index) with `pg_trgm`
+substring fallback, backed by indexes for every filter. Filters live entirely in
+the URL query string, so a search link is shareable and the back button restores
+it; typing is debounced 300ms, active filters appear as removable chips, and the
+result count is shown. Filter controls sit in a sidebar on desktop and a
+collapsible panel on mobile.
+
 
 ### Continuous integration
 

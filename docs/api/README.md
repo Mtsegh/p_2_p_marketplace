@@ -578,20 +578,28 @@ a draft.
 
 Public; no session required. Query params:
 
-| Field       | Rules                                                        |
-| ----------- | ------------------------------------------------------------ |
-| `category`  | optional category UUID                                       |
-| `condition` | optional `NEW`, `LIKE_NEW`, `GOOD`, `FAIR`, `POOR`           |
-| `listingType` | optional `SALE`, `EXCHANGE`, `BOTH`                         |
-| `minPrice`  | optional whole cents ≥ 0                                     |
-| `maxPrice`  | optional whole cents ≥ 0                                     |
-| `q`         | optional keyword search (title or description), ≤ 200 chars  |
-| `status`    | optional listing status filter                               |
-| `limit`     | 1 to 100, default 20                                         |
-| `cursor`    | optional UUID cursor for pagination                          |
+| Field       | Rules                                                                   |
+| ----------- | ----------------------------------------------------------------------- |
+| `category`  | optional category UUID or slug                                          |
+| `condition` | optional `NEW`, `LIKE_NEW`, `GOOD`, `FAIR`, `POOR`                      |
+| `listingType` | optional `SALE`, `EXCHANGE`, `BOTH`                                   |
+| `minPrice`  | optional whole cents ≥ 0                                                |
+| `maxPrice`  | optional whole cents ≥ 0                                                |
+| `q`         | keyword search on title/description: full-text (`@@`) plus trigram substring matches, ≤ 200 chars |
+| `location`  | optional case-insensitive substring, backed by a trigram index          |
+| `sort`      | `newest` (default), `price_asc`, `price_desc`, `relevance` (rank by `q`) |
+| `status`    | optional listing status filter                                          |
+| `limit`     | 1 to 100, default 20                                                    |
+| `cursor`    | opaque base64 token from `nextCursor`; encodes the last row's sort key  |
 
-`200` with `{ "data": { "listings": [<ListingDto>], "nextCursor": "..." } }`.
-Only `ACTIVE` listings are returned. `nextCursor` is null on the last page.
+`200` with
+`{ "data": { "listings": [<ListingDto>], "nextCursor": "...", "total": 42 } }`.
+Only `ACTIVE` listings are returned. `total` is the number of listings matching
+the filters before pagination. `nextCursor` is null on the last page.
+
+Full-text search uses a generated `tsvector` column (title weighted above
+description) with a GIN index; `pg_trgm` indexes on title, description, and
+location make substring filters and partial keywords fast.
 
 ### `GET /api/v1/listings/:listingId`
 

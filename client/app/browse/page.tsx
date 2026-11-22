@@ -1,27 +1,43 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { PageContainer } from "@/components/layout/page-container";
-import { BrowseGrid } from "@/components/listings/browse-grid";
+import { BrowseExperience } from "@/components/listings/browse-experience";
 import { Skeleton } from "@/components/ui/skeleton";
-import { fetchListings } from "@/lib/listings-api";
+import { parseBrowseFilters, filtersToQuery } from "@/lib/browse-filters";
+import { fetchCategories, fetchListings } from "@/lib/listings-api";
 
 export const metadata: Metadata = {
   title: "Browse",
   description: "Browse items for sale and exchange from members near you.",
 };
 
-/**
- * First page is fetched on the server so guests get a rendered grid. The
- * uncached fetch is wrapped in Suspense (required with Cache Components), and
- * BrowseGrid takes over for "Load more" pagination after hydration.
- */
-async function InitialListings() {
-  const firstPage = await fetchListings({ limit: 12 });
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
-  return <BrowseGrid initialPage={firstPage} />;
+/**
+ * Reads filters from the URL and fetches the matching first page on the server
+ * so guests get a rendered grid. The uncached fetch is wrapped in Suspense
+ * (required with Cache Components); the client takes over filter changes and
+ * "Load more" pagination.
+ */
+async function InitialResults({ searchParams }: { searchParams: SearchParams }) {
+  const params = await searchParams;
+  const filters = parseBrowseFilters(params);
+
+  const [firstPage, categories] = await Promise.all([
+    fetchListings(filtersToQuery(filters, { limit: 12 })),
+    fetchCategories().catch(() => []),
+  ]);
+
+  return (
+    <BrowseExperience
+      filters={filters}
+      categories={categories}
+      initialPage={firstPage}
+    />
+  );
 }
 
-function BrowseGridSkeleton() {
+function BrowseSkeleton() {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {Array.from({ length: 6 }).map((_, index) => (
@@ -40,7 +56,11 @@ function BrowseGridSkeleton() {
   );
 }
 
-export default function BrowsePage() {
+export default function BrowsePage({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
   return (
     <PageContainer className="py-10 sm:py-14">
       <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
@@ -50,8 +70,8 @@ export default function BrowsePage() {
         Find items for sale or exchange near you.
       </p>
       <div className="mt-8">
-        <Suspense fallback={<BrowseGridSkeleton />}>
-          <InitialListings />
+        <Suspense fallback={<BrowseSkeleton />}>
+          <InitialResults searchParams={searchParams} />
         </Suspense>
       </div>
     </PageContainer>
