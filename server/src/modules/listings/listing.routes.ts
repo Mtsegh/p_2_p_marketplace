@@ -3,6 +3,7 @@ import { ipKey, rateLimit, userKey } from "../../lib/rate-limit.js";
 import { requireTrustedOrigin } from "../../middleware/trusted-origin.js";
 import { requireAuth, requireRole, requireVerifiedEmail } from "../auth/auth.middleware.js";
 import * as controller from "./listing.controller.js";
+import * as imageController from "./image.controller.js";
 
 export const listingRouter = Router();
 
@@ -49,6 +50,22 @@ const publicCategoriesLimit = rateLimit({
   key: ipKey,
 });
 
+// Image upload presign requests per user.
+const presignLimit = rateLimit({
+  name: "image-presign-user",
+  limit: 30,
+  windowSeconds: ONE_HOUR,
+  key: userKey,
+});
+
+// Image modifications per user.
+const modifyImageLimit = rateLimit({
+  name: "image-modify-user",
+  limit: 30,
+  windowSeconds: ONE_HOUR,
+  key: userKey,
+});
+
 listingRouter.post(
   "/",
   requireTrustedOrigin,
@@ -92,6 +109,39 @@ listingRouter.post(
   requireAuth,
   modifyListingLimit,
   controller.publishListing,
+);
+
+// Image upload routes require ownership of the listing.
+listingRouter.post(
+  "/:listingId/images/presign",
+  requireTrustedOrigin,
+  requireAuth,
+  presignLimit,
+  imageController.presignUpload,
+);
+
+listingRouter.post(
+  "/:listingId/images/complete",
+  requireTrustedOrigin,
+  requireAuth,
+  modifyImageLimit,
+  imageController.completeUpload,
+);
+
+listingRouter.delete(
+  "/:listingId/images/:imageId",
+  requireTrustedOrigin,
+  requireAuth,
+  modifyImageLimit,
+  imageController.deleteListingImage,
+);
+
+listingRouter.patch(
+  "/:listingId/images/reorder",
+  requireTrustedOrigin,
+  requireAuth,
+  modifyImageLimit,
+  imageController.reorderListingImages,
 );
 
 // Categories are public to read, admin-only to write.

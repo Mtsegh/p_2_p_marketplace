@@ -10,6 +10,17 @@ export type ListingStatus =
   | "EXCHANGED"
   | "REMOVED";
 
+export interface ListingImage {
+  id: string;
+  key: string;
+  url: string;
+  mimeType: string;
+  sizeBytes: number;
+  width: number | null;
+  height: number | null;
+  position: number;
+}
+
 export interface Listing {
   id: string;
   ownerId: string;
@@ -23,6 +34,7 @@ export interface Listing {
   listingType: ListingType;
   status: ListingStatus;
   location: string;
+  images: ListingImage[];
   createdAt: string;
   updatedAt: string;
 }
@@ -159,4 +171,64 @@ export async function fetchCategories(): Promise<Category[]> {
   );
 
   return response.data.categories;
+}
+
+export interface PresignedUpload {
+  key: string;
+  url: string;
+  fields: Record<string, string>;
+  contentType: string;
+}
+
+/** Returns a presigned PUT URL for uploading a listing image. */
+export async function presignListingImage(input: {
+  listingId: string;
+  contentType: string;
+  sizeBytes: number;
+  suggestedFilename: string;
+}): Promise<PresignedUpload> {
+  const response = await apiRequestJson<{ data: { upload: PresignedUpload } }>(
+    `/api/v1/listings/${encodeURIComponent(input.listingId)}/images/presign`,
+    "POST",
+    input,
+  );
+
+  return response.data.upload;
+}
+
+/** Confirms an uploaded image and creates the database record. */
+export async function completeListingImage(input: {
+  listingId: string;
+  key: string;
+}): Promise<ListingImage> {
+  const response = await apiRequestJson<{ data: { image: ListingImage } }>(
+    `/api/v1/listings/${encodeURIComponent(input.listingId)}/images/complete`,
+    "POST",
+    input,
+  );
+
+  return response.data.image;
+}
+
+/** Deletes a listing image. */
+export async function deleteListingImage(input: {
+  listingId: string;
+  imageId: string;
+}): Promise<void> {
+  await apiRequestJson<null>(
+    `/api/v1/listings/${encodeURIComponent(input.listingId)}/images/${encodeURIComponent(input.imageId)}`,
+    "DELETE",
+  );
+}
+
+/** Reorders listing images. */
+export async function reorderListingImages(input: {
+  listingId: string;
+  imageIds: string[];
+}): Promise<void> {
+  await apiRequestJson<null>(
+    `/api/v1/listings/${encodeURIComponent(input.listingId)}/images/reorder`,
+    "PATCH",
+    input,
+  );
 }

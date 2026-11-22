@@ -38,6 +38,21 @@ export function createListing(data: {
     include: {
       owner: { select: { id: true, profile: true } },
       category: { select: { id: true, name: true, slug: true } },
+      images: {
+        select: {
+          id: true,
+          key: true,
+          url: true,
+          mimeType: true,
+          sizeBytes: true,
+          width: true,
+          height: true,
+          position: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+        orderBy: { position: "asc" },
+      },
     },
   });
 }
@@ -48,6 +63,21 @@ export function findListingById(listingId: string) {
     include: {
       owner: { select: { id: true, profile: true } },
       category: { select: { id: true, name: true, slug: true } },
+      images: {
+        select: {
+          id: true,
+          key: true,
+          url: true,
+          mimeType: true,
+          sizeBytes: true,
+          width: true,
+          height: true,
+          position: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+        orderBy: { position: "asc" },
+      },
     },
   });
 }
@@ -84,6 +114,21 @@ export function updateListing(
     include: {
       owner: { select: { id: true, profile: true } },
       category: { select: { id: true, name: true, slug: true } },
+      images: {
+        select: {
+          id: true,
+          key: true,
+          url: true,
+          mimeType: true,
+          sizeBytes: true,
+          width: true,
+          height: true,
+          position: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+        orderBy: { position: "asc" },
+      },
     },
   });
 }

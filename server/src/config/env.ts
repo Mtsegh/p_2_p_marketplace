@@ -53,6 +53,28 @@ const envSchema = z
     /** How outbound SMS leaves the process. `console` writes the message to the
      * log (local development), and `memory` keeps it in an array for tests. */
     SMS_PROVIDER: z.enum(["console", "memory"]).default("console"),
+    /** How object storage for listing images behaves. `s3` uploads to an
+     * S3-compatible bucket, `memory` keeps uploads in RAM for tests. */
+    STORAGE_PROVIDER: z.enum(["s3", "memory"]).default("memory"),
+    /** S3 bucket name for listing images. */
+    S3_BUCKET: z.string().trim().min(1).optional(),
+    /** S3 region. */
+    S3_REGION: z.string().trim().min(1).default("us-east-1"),
+    /** S3 access key ID. Empty outside production is accepted. */
+    S3_ACCESS_KEY_ID: z.string().trim().min(1).optional(),
+    /** S3 secret access key. Empty outside production is accepted. */
+    S3_SECRET_ACCESS_KEY: z.string().trim().min(1).optional(),
+    /** S3 endpoint for S3-compatible services (MinIO, R2, etc.). */
+    S3_ENDPOINT: z.string().trim().min(1).optional(),
+    /** Whether to use path-style S3 URLs (required for MinIO). */
+    S3_FORCE_PATH_STYLE: z.preprocess(
+      (value) => value === "true" || value === true,
+      z.boolean().default(false),
+    ),
+    /** Public base URL for S3 objects (CDN or bucket website URL). */
+    S3_PUBLIC_URL: z.string().trim().min(1).optional(),
+    /** How long presigned PUT URLs are valid, in seconds. */
+    S3_PRESIGN_TTL_SECONDS: z.coerce.number().int().min(60).max(86_400).default(900),
     EMAIL_FROM_ADDRESS: z
       .string()
       .trim()
@@ -85,6 +107,30 @@ const envSchema = z
         path: ["BREVO_API_KEY"],
         message: "is required when EMAIL_PROVIDER is brevo",
       });
+    }
+
+    if (value.NODE_ENV === "production" && value.STORAGE_PROVIDER === "s3") {
+      if (!value.S3_BUCKET) {
+        context.addIssue({
+          code: "custom",
+          path: ["S3_BUCKET"],
+          message: "is required when STORAGE_PROVIDER is s3",
+        });
+      }
+      if (!value.S3_ACCESS_KEY_ID) {
+        context.addIssue({
+          code: "custom",
+          path: ["S3_ACCESS_KEY_ID"],
+          message: "is required when STORAGE_PROVIDER is s3",
+        });
+      }
+      if (!value.S3_SECRET_ACCESS_KEY) {
+        context.addIssue({
+          code: "custom",
+          path: ["S3_SECRET_ACCESS_KEY"],
+          message: "is required when STORAGE_PROVIDER is s3",
+        });
+      }
     }
   });
 

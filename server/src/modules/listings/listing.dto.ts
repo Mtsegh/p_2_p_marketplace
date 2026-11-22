@@ -6,6 +6,17 @@ import type {
   ListingType,
 } from "../../generated/prisma/client.js";
 
+export interface ListingImageDto {
+  id: string;
+  key: string;
+  url: string;
+  mimeType: string;
+  sizeBytes: number;
+  width: number | null;
+  height: number | null;
+  position: number;
+}
+
 export interface ListingDto {
   id: string;
   ownerId: string;
@@ -19,6 +30,7 @@ export interface ListingDto {
   listingType: ListingType;
   status: ListingStatus;
   location: string;
+  images: ListingImageDto[];
   createdAt: string;
   updatedAt: string;
 }
@@ -30,12 +42,25 @@ export interface CategoryDto {
 }
 
 /**
- * A listing with its owner and category relations included. Used by queries
- * that eagerly load relations so TypeScript knows the shape at compile time.
+ * A listing with its owner, category, and images relations included. Used by
+ * queries that eagerly load relations so TypeScript knows the shape at compile
+ * time.
  */
 export interface ListingWithRelations extends Listing {
   owner: { id: string; profile: { displayName: string } | null };
   category: { id: string; name: string; slug: string } | null;
+  images: Array<{
+    id: string;
+    key: string;
+    url: string;
+    mimeType: string;
+    sizeBytes: number;
+    width: number | null;
+    height: number | null;
+    position: number;
+    createdAt: Date;
+    updatedAt: Date;
+  }>;
 }
 
 /**
@@ -57,6 +82,16 @@ export function toListingDto(listing: ListingWithRelations): ListingDto {
     listingType: listing.listingType,
     status: listing.status,
     location: listing.location,
+    images: listing.images.map((image) => ({
+      id: image.id,
+      key: image.key,
+      url: image.url,
+      mimeType: image.mimeType,
+      sizeBytes: image.sizeBytes,
+      width: image.width,
+      height: image.height,
+      position: image.position,
+    })),
     createdAt: listing.createdAt.toISOString(),
     updatedAt: listing.updatedAt.toISOString(),
   };

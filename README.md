@@ -223,6 +223,15 @@ Public pages:
 - `/sell` — create a draft listing (requires verified email)
 - `/users/<id>` — public profile with initials avatar and verified badges
 
+Listing images upload directly to S3-compatible storage through presigned PUT
+URLs, so the API never handles raw bytes. The client requests a presigned URL,
+PUTs the file, and confirms the upload; the API then records the image. Each
+listing holds up to 10 images (JPEG, PNG, WebP, or GIF, 8 MiB each) that can be
+deleted and reordered. Locally and in tests, `STORAGE_PROVIDER=memory` keeps
+uploads in RAM so no S3 account is needed; production uses `STORAGE_PROVIDER=s3`
+with the `S3_*` variables in `server/.env.example`. Image type and size are
+validated at presign time on the server and again in the browser before upload.
+
 
 ### Continuous integration
 

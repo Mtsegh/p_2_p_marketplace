@@ -10,7 +10,9 @@ import { Select } from "@/components/ui/select";
 import { TextArea } from "@/components/ui/text-area";
 import { TextField } from "@/components/ui/text-field";
 import { ApiError } from "@/lib/api";
-import { createListing } from "@/lib/listings-api";
+import { createListing, fetchListing } from "@/lib/listings-api";
+import { ImageUpload } from "./image-upload";
+import { ImageGallery } from "./image-gallery";
 
 const conditionOptions = [
   { value: "NEW", label: "New" },
@@ -37,13 +39,7 @@ const schema = z.object({
     .trim()
     .min(1, "Enter a description")
     .max(2000, "Use 2000 characters or fewer"),
-  condition: z.enum([
-    "NEW",
-    "LIKE_NEW",
-    "GOOD",
-    "FAIR",
-    "POOR",
-  ]),
+  condition: z.enum(["NEW", "LIKE_NEW", "GOOD", "FAIR", "POOR"]),
   priceCents: z
     .number()
     .int()
@@ -60,15 +56,21 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
+type ListingImage = {
+  id: string;
+  url: string;
+  key: string;
+};
+
 export function CreateListingForm({
   categories,
-  onSuccess,
 }: {
   categories: { id: string; name: string; slug: string }[];
-  onSuccess?: () => void;
 }) {
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [listing, setListing] = useState<{ id: string } | null>(null);
+  const [images, setImages] = useState<ListingImage[]>([]);
 
   const {
     register,
@@ -90,7 +92,7 @@ export function CreateListingForm({
     },
   });
 
-  async function onSubmit(values: FormValues): Promise<void> {
+  async function handleCreateSubmit(values: FormValues): Promise<void> {
     setFormError(null);
     setSubmitting(true);
 
@@ -105,9 +107,10 @@ export function CreateListingForm({
         location: values.location,
       };
 
-      await createListing(input);
+      const created = await createListing(input);
+      setListing({ id: created.id });
+      setImages([]);
       reset();
-      onSuccess?.();
     } catch (caught) {
       setSubmitting(false);
 
@@ -140,10 +143,72 @@ export function CreateListingForm({
     }
   }
 
+  function handleImageAdded(image: { id: string; url: string }) {
+    setImages((prev) => [
+      ...prev,
+      { id: image.id, url: image.url, key: "" },
+    ]);
+  }
+
+  function handleImageDeleted() {
+    // Refresh images from the API after a deletion so the gallery stays in sync.
+    if (listing) {
+      fetchListing(listing.id)
+        .then((updated) => {
+          setImages(
+            updated.images.map((image) => ({
+              id: image.id,
+              url: image.url,
+              key: image.key,
+            })),
+          );
+        })
+        .catch(() => {
+          // Best effort: the gallery still shows the current local state.
+        });
+    }
+  }
+
+  if (listing) {
+    return (
+      <div className="flex flex-col gap-5">
+        <Alert tone="success" title="Draft listing created">
+          Your listing has been created as a draft. Add photos, then publish
+          when you&apos;re ready.
+        </Alert>
+
+        <section className="rounded-lg border border-line bg-surface p-6">
+          <h3 className="text-lg font-semibold">Listing photos</h3>
+          <p className="mt-1 text-sm text-muted">
+            Add up to 10 photos. Buyers are more likely to respond to listings
+            with clear images.
+          </p>
+          <div className="mt-4 flex flex-col gap-4">
+            <ImageUpload
+              listingId={listing.id}
+              onImageAdded={handleImageAdded}
+            />
+            <ImageGallery
+              images={images.map((img) => ({ id: img.id, url: img.url, key: img.key, position: 0 }))}
+              listingId={listing.id}
+              onImageDeleted={handleImageDeleted}
+            />
+          </div>
+        </section>
+
+        <div className="flex gap-3">
+          <Button variant="secondary" onClick={() => setListing(null)}>
+            Create another listing
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <form
       noValidate
-      onSubmit={handleSubmit(onSubmit)}
+      onSubmit={handleSubmit(handleCreateSubmit)}
       className="flex flex-col gap-5"
     >
       {formError ? (

@@ -12,9 +12,10 @@ import {
   readOutbox as readSmsOutbox,
   type CapturedSms,
 } from "../src/modules/sms/memory.provider.js";
+import { clearStorage } from "../src/modules/storage/memory.provider.js";
+import { hashPassword } from "../src/modules/auth/password.js";
 
 export { clearSmsOutbox, readSmsOutbox };
-import { hashPassword } from "../src/modules/auth/password.js";
 
 /**
  * Tests share one database, so each test starts from an empty identity slice
@@ -23,12 +24,13 @@ import { hashPassword } from "../src/modules/auth/password.js";
  */
 export async function resetIdentityState(): Promise<void> {
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "auth_tokens", "sessions", "users", "listings", "categories" RESTART IDENTITY CASCADE',
+    'TRUNCATE TABLE "auth_tokens", "sessions", "users", "listings", "listing_images", "categories" RESTART IDENTITY CASCADE',
   );
   await ensureRedisConnected();
   await redis.flushdb();
   clearOutbox();
   clearSmsOutbox();
+  clearStorage();
 }
 
 export function setCookies(response: request.Response): string[] {

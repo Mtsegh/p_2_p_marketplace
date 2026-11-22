@@ -216,6 +216,10 @@ is treated as token theft and the whole token family is revoked.
 | `GET /listings/:listingId`       | per IP                                            | 60 per 15 minutes                     |
 | `GET /listings/categories`       | per IP                                            | 60 per 15 minutes                     |
 | `POST /listings/categories`      | per user (admin)                                  | 10 per hour                           |
+| `POST /listings/:id/images/presign`| per user                                         | 30 per hour                           |
+| `POST /listings/:id/images/complete`| per user                                        | 30 per hour                           |
+| `DELETE /listings/:id/images/:imageId`| per user                                      | 30 per hour                           |
+| `PATCH /listings/:id/images/reorder`| per user                                        | 30 per hour                           |
 
 The limiter uses Redis. If Redis is unavailable the limiter fails open and logs
 a warning: a cache outage must not lock everyone out of signing in.
@@ -633,6 +637,64 @@ Requires `Authorization`, `ADMIN` role, and a trusted `Origin`. Body:
 
 `201` with `{ "data": { "category": <CategoryDto> } }`. `409` if the slug is
 already in use.
+
+### Listing images
+
+Images are uploaded directly to S3-compatible storage using presigned URLs. The
+API never receives raw image bytes: it hands out a presigned PUT URL, the client
+uploads the file, then the client confirms the upload so the API records the
+image. A listing can hold at most 10 images.
+
+All image routes require `Authorization` and a trusted `Origin`, and the caller
+must own the listing. A listing that is part of an active deal cannot have its
+images changed.
+
+#### `POST /api/v1/listings/:listingId/images/presign`
+
+Body:
+
+| Field              | Rules                                                       |
+| ------------------ | ----------------------------------------------------------- |
+| `contentType`      | `image/jpeg`, `image/png`, `image/webp`, or `image/gif`     |
+| `sizeBytes`        | 1 to 8 MiB                                                  |
+| `suggestedFilename`| 1 to 255 characters                                         |
+
+`200` with `{ "data": { "upload": { "key", "url", "fields", "contentType" } } }`.
+The client PUTs the file to `url` with the supplied content type, then calls
+`complete` with the returned `key`. `409 IMAGE_LIMIT_REACHED` when the listing
+already has 10 images. `403` for a non-owner.
+
+#### `POST /api/v1/listings/:listingId/images/complete`
+
+Body: `{ "key": "<key returned by presign>" }`. `200` with
+`{ "data": { "image": <ListingImageDto> } }`. The image is appended at the next
+position. `409 IMAGE_LIMIT_REACHED` when the listing already has 10 images.
+
+#### `DELETE /api/v1/listings/:listingId/images/:imageId`
+
+`204` on success. Removes the image record and the stored object. `403` if the
+caller does not own the image's listing.
+
+#### `PATCH /api/v1/listings/:listingId/images/reorder`
+
+Body: `{ "imageIds": ["<uuid>", ...] }` — the desired display order (at least
+one, at most 10). `204` on success. Sets `position` by array index.
+
+Images are returned on every listing response under `images`, sorted by
+`position`. A `ListingImageDto` is:
+
+```json
+{
+  "id": "...",
+  "key": "listings/<listingId>/<uuid>.jpg",
+  "url": "https://cdn.example.com/listings/<listingId>/<uuid>.jpg",
+  "mimeType": "image/jpeg",
+  "sizeBytes": 12345,
+  "width": null,
+  "height": null,
+  "position": 0
+}
+```
 
 ### `GET /api/v1/admin/users`
 

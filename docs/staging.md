@@ -73,6 +73,14 @@ Target shape (details land in chunk 30):
 | `BREVO_API_KEY`            | Brevo API key from Secrets Manager                             |
 | `LOG_LEVEL`                | `info`                                                         |
 | `SMS_PROVIDER`             | `console` in development; a real SMS provider in production    |
+| `STORAGE_PROVIDER`         | `s3` (required in production for listing images)               |
+| `S3_BUCKET`                | S3 bucket for listing images, from Secrets Manager             |
+| `S3_REGION`                | bucket region, e.g. `us-east-1`                                |
+| `S3_ACCESS_KEY_ID`         | S3 access key from Secrets Manager                             |
+| `S3_SECRET_ACCESS_KEY`     | S3 secret key from Secrets Manager                             |
+| `S3_PUBLIC_URL`            | CDN or bucket public URL prefix, e.g. `https://cdn.example.com`|
+| `S3_ENDPOINT`              | optional, for S3-compatible services (MinIO, R2)              |
+| `S3_FORCE_PATH_STYLE`      | `true` for MinIO, otherwise `false`                            |
 
 ## Verification checklist
 
@@ -95,6 +103,8 @@ Target shape (details land in chunk 30):
 - [ ] Deleting an account signs out every device and removes the public profile.
 - [ ] A member can request a phone verification code by SMS, enter it, and see
       the "Phone verified" badge on their profile.
+- [ ] A seller can add, delete, and reorder photos on a listing, and the images
+      load from the configured bucket/CDN on the public listing page.
 - [ ] Stopping the API shows the error state, and restarting it recovers with
       "Check again".
 - [ ] A pull request runs lint, typecheck, test, and build for both projects.
@@ -115,4 +125,11 @@ Chunk 9 adds listings and categories. Members can create draft listings,
 publish them, edit or delete their own listings, and browse public listings
 with filters and pagination. The sell page at `/sell` requires a verified
 email address.
+
+Chunk 10 adds listing images. Uploads go straight to S3-compatible storage via
+presigned URLs; `S3_BUCKET` and the `S3_*` credentials must be configured for the
+image flows to work on staging. Locally and in tests, `STORAGE_PROVIDER=memory`
+keeps uploads in RAM, so no bucket is needed. A production bucket also needs a
+public read policy or CDN origin access so the returned image URLs are visible
+to buyers.
 

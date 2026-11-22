@@ -6,7 +6,7 @@
 // Scope: the identity slice needed by Phases 1 and 2. `PhoneOtp` (chunk 8) is
 // added with its own migration when that chunk lands. `Profile` arrived with
 // chunk 7. Listings, categories, and listing lifecycle states arrive with
-// chunk 9.
+// chunk 9. Listing images arrive with chunk 10.
 
 generator client {
   provider            = "prisma-client"
@@ -180,6 +180,7 @@ model Listing {
   createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
 
+  images      ListingImage[]
   owner    User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
@@ -190,4 +191,25 @@ model Listing {
   @@index([condition])
   @@index([createdAt])
   @@map("listings")
+}
+
+/// An image attached to a listing. Stored in S3-compatible object storage;
+/// the `key` identifies the object, and `url` is the public CDN URL.
+model ListingImage {
+  id        String   @id @default(uuid()) @db.Uuid
+  listingId String   @map("listing_id") @db.Uuid
+  key       String   @map("key") @db.VarChar(500) // S3 object key
+  url       String   @map("url") @db.VarChar(1000) // Public CDN URL
+  mimeType  String   @map("mime_type") @db.VarChar(100)
+  sizeBytes Int      @map("size_bytes")
+  width     Int?     @map("width")
+  height    Int?     @map("height")
+  position  Int      @map("position") @default(0) // Display order within the listing
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+  @@map("listing_images")
 }
