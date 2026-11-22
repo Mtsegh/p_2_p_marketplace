@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { PageContainer } from "@/components/layout/page-container";
-import { EmptyState } from "@/components/ui/empty-state";
+import { DealsView } from "@/components/deals/deals-view";
 
 export const metadata: Metadata = {
   title: "Deals",
@@ -13,13 +13,10 @@ export default function DealsPage() {
         Deals
       </h1>
       <p className="mt-2 max-w-2xl text-muted">
-        Track every offer and handoff in one place.
+        Manage the offers you have sent and received.
       </p>
       <div className="mt-8">
-        <EmptyState
-          title="No deals yet"
-          description="Proposals you send or receive will appear here, along with their current status."
-        />
+        <DealsView />
       </div>
     </PageContainer>
   );

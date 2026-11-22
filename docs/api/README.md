@@ -646,6 +646,57 @@ Requires `Authorization`, `ADMIN` role, and a trusted `Origin`. Body:
 `201` with `{ "data": { "category": <CategoryDto> } }`. `409` if the slug is
 already in use.
 
+## Deals
+
+A deal begins as a sale proposal from a buyer on an active listing and moves
+through an explicit state machine. Every transition is appended to an audit
+history with the actor and timestamp. Only the buyer and seller of a deal may
+read it. Listing reservation and competing-proposal rejection happen atomically
+under a row lock when a proposal is accepted.
+
+State machine (later chunks add payment, completion, and dispute transitions):
+
+- `PROPOSED` → `ACCEPTED` (seller) / `REJECTED` (seller) / `CANCELLED` (buyer)
+- `ACCEPTED` → `CANCELLED` / `PAYMENT_PENDING`
+
+All deal routes require `Authorization`; writes also require a trusted `Origin`.
+Creating a proposal additionally requires a verified email address.
+
+### `POST /api/v1/deals`
+
+Body: `{ "listingId": "<uuid>", "amountCents": <int > 0> }`. `201` with
+`{ "data": { "deal": <DealDto> } }`. Rejections: `422` for your own listing,
+an exchange-only listing, or a duplicate pending proposal; `409` when the
+listing is not active; `403` when the email is unverified.
+
+### `GET /api/v1/deals`
+
+Query: `role` (`buyer`, `seller`, `all`), `status`, `limit`, `cursor`. `200` with
+`{ "data": { "deals": [<DealDto>], "nextCursor": "..." } }`. Returns only deals
+where the caller is a participant.
+
+### `GET /api/v1/deals/:dealId`
+
+`200` with the full deal including its `history` array. `404` if missing, `403`
+if the caller is not a participant.
+
+### `POST /api/v1/deals/:dealId/accept`
+
+Seller only. `200` with the accepted deal. Marks the listing `RESERVED` and
+rejects every competing proposal (with a history entry for each). `409` when
+the deal is not `PROPOSED` or the listing is no longer available.
+
+### `POST /api/v1/deals/:dealId/reject`
+
+Seller only. Moves a `PROPOSED` deal to `REJECTED`. `200` with the updated deal.
+
+### `POST /api/v1/deals/:dealId/cancel`
+
+Buyer only. Moves a `PROPOSED` deal to `CANCELLED`. `200` with the updated deal.
+
+A `DealDto` includes the listing title, both participants and their display
+names, type, amount, status, timestamps, and the history array.
+
 ### Listing images
 
 Images are uploaded directly to S3-compatible storage using presigned URLs. The

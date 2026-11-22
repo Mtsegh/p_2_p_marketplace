@@ -249,6 +249,12 @@ it; typing is debounced 300ms, active filters appear as removable chips, and the
 result count is shown. Filter controls sit in a sidebar on desktop and a
 collapsible panel on mobile.
 
+Buyers can make a sale offer on a listing's detail page; `/deals` lists offers
+sent and received with accept/reject/cancel actions, and each deal has a detail
+page showing its full state-change history. Deals use an explicit state machine,
+and accepting a proposal locks the listing, reserves it, and rejects competing
+proposals atomically — two buyers cannot both get the same item.
+
 
 ### Continuous integration
 

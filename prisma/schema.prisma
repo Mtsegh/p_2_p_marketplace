@@ -56,8 +56,79 @@ model User {
   authTokens AuthToken[]
   profile    Profile?
   listings   Listing[]
+  /// Deals where this user is the buyer (the proposer).
+  boughtDeals Deal[] @relation("BuyerDeals")
+  /// Deals where this user is the seller (the listing owner).
+  soldDeals   Deal[] @relation("SellerDeals")
+  /// Actors recorded in deal history.
+  dealEvents DealHistory[]
 
   @@map("users")
+}
+
+/// How a deal is to be settled. Exchange offers get their offered listings in
+/// a later chunk; for now only SALE proposals exist.
+enum DealType {
+  SALE
+  EXCHANGE
+}
+
+/// Explicit deal lifecycle. The state machine in code is the only place that
+/// decides which transitions are legal; this enum lists every state so later
+/// chunks can add transitions without a schema migration.
+enum DealStatus {
+  PROPOSED
+  ACCEPTED
+  REJECTED
+  CANCELLED
+  PAYMENT_PENDING
+  COMPLETED
+  DISPUTED
+  RESOLVED
+}
+
+/// A proposal from a buyer to a seller over one listing. The deal record IS the
+/// proposal: its initial status is PROPOSED and it moves through the state
+/// machine. Only one deal per listing may be ACCEPTED at a time (enforced by a
+/// partial unique index in the migration).
+model Deal {
+  id         String     @id @default(uuid()) @db.Uuid
+  listingId  String     @map("listing_id") @db.Uuid
+  buyerId    String     @map("buyer_id") @db.Uuid
+  sellerId   String     @map("seller_id") @db.Uuid
+  type       DealType   @default(SALE) @map("type")
+  amountCents Int?      @map("amount_cents") // Offer price; null for exchange-only
+  status     DealStatus @default(PROPOSED) @map("status")
+  createdAt  DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  buyer   User    @relation("BuyerDeals", fields: [buyerId], references: [id], onDelete: Cascade)
+  seller  User    @relation("SellerDeals", fields: [sellerId], references: [id], onDelete: Cascade)
+  history DealHistory[]
+
+  @@index([listingId])
+  @@index([buyerId])
+  @@index([sellerId])
+  @@index([status])
+  @@map("deals")
+}
+
+/// Append-only audit of every deal state transition, with actor and timestamp.
+model DealHistory {
+  id         String      @id @default(uuid()) @db.Uuid
+  dealId     String      @map("deal_id") @db.Uuid
+  actorId    String?     @map("actor_id") @db.Uuid
+  fromStatus DealStatus  @map("from_status")
+  toStatus   DealStatus  @map("to_status")
+  note       String?     @map("note")
+  createdAt  DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  deal  Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([dealId])
+  @@map("deal_history")
 }
 
 /// Public profile data, split from `User` so a public read can never select the
@@ -181,6 +252,7 @@ model Listing {
   updatedAt   DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   images      ListingImage[]
+  deals       Deal[]
   owner    User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 

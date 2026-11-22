@@ -111,6 +111,9 @@ Target shape (details land in chunk 30):
 - [ ] A keyword plus filters (category, condition, type, price, location, sort)
       returns correct results, the URL can be shared and restored with the back
       button, and the result count matches the filters.
+- [ ] Two buyers can propose on one listing; the seller accepts one and the other
+      is auto-rejected, the listing shows RESERVED, and every step appears in the
+      deal history.
 - [ ] Stopping the API shows the error state, and restarting it recovers with
       "Check again".
 - [ ] A pull request runs lint, typecheck, test, and build for both projects.

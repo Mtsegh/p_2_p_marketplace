@@ -3,11 +3,11 @@ import { notFound } from "next/navigation";
 import { cache } from "react";
 import { Suspense } from "react";
 import { PageContainer } from "@/components/layout/page-container";
+import { ProposalForm } from "@/components/deals/proposal-form";
 import { ListingGallery } from "@/components/listings/listing-gallery";
 import { ListingCard } from "@/components/listings/listing-card";
 import { SellerCard } from "@/components/listings/seller-card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError } from "@/lib/api";
 import {
@@ -148,17 +148,12 @@ export default async function ListingDetailPage({ params }: PageProps) {
           </div>
 
           <div>
-            <Button
-              size="lg"
-              disabled
-              className="w-full"
-              title="Proposals open in the next release"
-            >
-              Make an offer
-            </Button>
-            <p className="mt-2 text-center text-xs text-muted">
-              Offers open when proposals launch.
-            </p>
+            <ProposalForm
+              listingId={listing.id}
+              ownerId={listing.ownerId}
+              listingType={listing.listingType}
+              askCents={listing.priceCents}
+            />
           </div>
 
           <section aria-labelledby="description-heading">

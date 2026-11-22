@@ -1,0 +1,241 @@
+import request from "supertest";
+import { beforeEach, describe, expect, it } from "vitest";
+import { createApp } from "../src/app.js";
+import { prisma } from "../src/db/prisma.js";
+import { registerUser, resetIdentityState } from "./helpers.js";
+
+const app = createApp();
+
+beforeEach(async () => {
+  await resetIdentityState();
+});
+
+/** Creates a verified seller, a verified buyer, and an active listing. */
+async function setup() {
+  const seller = await registerUser(app);
+  const buyer = await registerUser(app);
+
+  await prisma.user.updateMany({
+    where: { id: { in: [seller.id, buyer.id] } },
+    data: { emailVerifiedAt: new Date() },
+  });
+
+  const listing = await prisma.listing.create({
+    data: {
+      ownerId: seller.id,
+      title: "A camera",
+      description: "Good condition",
+      location: "Lagos",
+      status: "ACTIVE",
+      priceCents: 10000,
+    },
+  });
+
+  return { seller, buyer, listing };
+}
+
+function auth(token: string) {
+  return (req: request.Test) =>
+    req.set("Authorization", `Bearer ${token}`);
+}
+
+function propose(token: string, listingId: string, amountCents = 9000) {
+  return auth(token)(
+    request(app)
+      .post("/api/v1/deals")
+      .set("Origin", "http://localhost:3000")
+      .send({ listingId, amountCents }),
+  );
+}
+
+describe("POST /api/v1/deals", () => {
+  it("creates a PROPOSED sale deal with a history entry", async () => {
+    const { buyer, listing } = await setup();
+
+    const response = await propose(
+      buyer.accessToken,
+      listing.id,
+    ).expect(201);
+
+    expect(response.body.data.deal).toMatchObject({
+      listingId: listing.id,
+      buyerId: buyer.id,
+      status: "PROPOSED",
+      type: "SALE",
+      amountCents: 9000,
+    });
+    expect(response.body.data.deal.history).toHaveLength(1);
+  });
+
+  it("rejects a proposal on your own listing", async () => {
+    const { seller, listing } = await setup();
+
+    await propose(seller.accessToken, listing.id).expect(422);
+  });
+
+  it("rejects a proposal on a non-active listing", async () => {
+    const { buyer, listing } = await setup();
+
+    await prisma.listing.update({
+      where: { id: listing.id },
+      data: { status: "DRAFT" },
+    });
+
+    await propose(buyer.accessToken, listing.id).expect(409);
+  });
+
+  it("rejects a duplicate proposal from the same buyer", async () => {
+    const { buyer, listing } = await setup();
+
+    await propose(buyer.accessToken, listing.id).expect(201);
+    await propose(buyer.accessToken, listing.id).expect(409);
+  });
+
+  it("requires a verified email", async () => {
+    const { buyer, listing } = await setup();
+
+    await prisma.user.update({
+      where: { id: buyer.id },
+      data: { emailVerifiedAt: null },
+    });
+
+    await propose(buyer.accessToken, listing.id).expect(403);
+  });
+});
+
+describe("POST /api/v1/deals/:dealId/accept", () => {
+  it("accepts a proposal, reserves the listing, and rejects competing proposals", async () => {
+    const { seller, buyer, listing } = await setup();
+    const otherBuyer = await registerUser(app);
+    await prisma.user.update({
+      where: { id: otherBuyer.id },
+      data: { emailVerifiedAt: new Date() },
+    });
+
+    const first = await propose(buyer.accessToken, listing.id).expect(201);
+    const second = await propose(
+      otherBuyer.accessToken,
+      listing.id,
+      9500,
+    ).expect(201);
+
+    const accepted = await auth(seller.accessToken)(
+      request(app)
+        .post(`/api/v1/deals/${first.body.data.deal.id}/accept`)
+        .set("Origin", "http://localhost:3000"),
+    ).expect(200);
+
+    expect(accepted.body.data.deal.status).toBe("ACCEPTED");
+    expect(accepted.body.data.deal.history).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ toStatus: "ACCEPTED" }),
+      ]),
+    );
+
+    const reserved = await prisma.listing.findUnique({
+      where: { id: listing.id },
+    });
+    expect(reserved?.status).toBe("RESERVED");
+
+    const competitor = await prisma.deal.findUnique({
+      where: { id: second.body.data.deal.id },
+    });
+    expect(competitor?.status).toBe("REJECTED");
+
+    // The competing rejection is recorded in history.
+    const competitorHistory = await prisma.dealHistory.findMany({
+      where: { dealId: competitor!.id },
+    });
+    expect(competitorHistory).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ toStatus: "REJECTED" }),
+      ]),
+    );
+  });
+
+  it("only the seller can accept", async () => {
+    const { buyer, listing } = await setup();
+    const deal = await propose(buyer.accessToken, listing.id).expect(201);
+
+    await auth(buyer.accessToken)(
+      request(app)
+        .post(`/api/v1/deals/${deal.body.data.deal.id}/accept`)
+        .set("Origin", "http://localhost:3000"),
+    ).expect(403);
+  });
+
+  it("cannot accept a deal that is not PROPOSED", async () => {
+    const { seller, buyer, listing } = await setup();
+    const deal = await propose(buyer.accessToken, listing.id).expect(201);
+
+    await auth(buyer.accessToken)(
+      request(app)
+        .post(`/api/v1/deals/${deal.body.data.deal.id}/cancel`)
+        .set("Origin", "http://localhost:3000"),
+    ).expect(200);
+
+    await auth(seller.accessToken)(
+      request(app)
+        .post(`/api/v1/deals/${deal.body.data.deal.id}/accept`)
+        .set("Origin", "http://localhost:3000"),
+    ).expect(409);
+  });
+});
+
+describe("reject and cancel", () => {
+  it("lets the seller reject a proposal", async () => {
+    const { seller, buyer, listing } = await setup();
+    const deal = await propose(buyer.accessToken, listing.id).expect(201);
+
+    const response = await auth(seller.accessToken)(
+      request(app)
+        .post(`/api/v1/deals/${deal.body.data.deal.id}/reject`)
+        .set("Origin", "http://localhost:3000"),
+    ).expect(200);
+
+    expect(response.body.data.deal.status).toBe("REJECTED");
+  });
+
+  it("lets the buyer cancel a proposal", async () => {
+    const { buyer, listing } = await setup();
+    const deal = await propose(buyer.accessToken, listing.id).expect(201);
+
+    const response = await auth(buyer.accessToken)(
+      request(app)
+        .post(`/api/v1/deals/${deal.body.data.deal.id}/cancel`)
+        .set("Origin", "http://localhost:3000"),
+    ).expect(200);
+
+    expect(response.body.data.deal.status).toBe("CANCELLED");
+  });
+
+  it("a stranger cannot act on a deal", async () => {
+    const { buyer, listing } = await setup();
+    const stranger = await registerUser(app);
+    const deal = await propose(buyer.accessToken, listing.id).expect(201);
+
+    await auth(stranger.accessToken)(
+      request(app)
+        .get(`/api/v1/deals/${deal.body.data.deal.id}`),
+    ).expect(403);
+  });
+});
+
+describe("GET /api/v1/deals", () => {
+  it("lists only the caller's deals", async () => {
+    const { buyer, listing } = await setup();
+    const deal = await propose(buyer.accessToken, listing.id).expect(201);
+
+    const buyerList = await auth(buyer.accessToken)(
+      request(app).get("/api/v1/deals").query({ role: "buyer" }),
+    ).expect(200);
+    expect(buyerList.body.data.deals).toHaveLength(1);
+    expect(buyerList.body.data.deals[0].id).toBe(deal.body.data.deal.id);
+
+    const other = await registerUser(app);
+    const otherList = await auth(other.accessToken)(
+      request(app).get("/api/v1/deals"),
+    ).expect(200);
+    expect(otherList.body.data.deals).toHaveLength(0);
+  });
+});
