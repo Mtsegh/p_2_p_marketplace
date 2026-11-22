@@ -105,6 +105,9 @@ Target shape (details land in chunk 30):
       the "Phone verified" badge on their profile.
 - [ ] A seller can add, delete, and reorder photos on a listing, and the images
       load from the configured bucket/CDN on the public listing page.
+- [ ] A guest can browse `/browse`, use "Load more" to reach the end without
+      skipped listings, and open a detail page at `/listings/<id>` with a seller
+      card, gallery, and SEO title/description.
 - [ ] Stopping the API shows the error state, and restarting it recovers with
       "Check again".
 - [ ] A pull request runs lint, typecheck, test, and build for both projects.
@@ -132,4 +135,7 @@ image flows to work on staging. Locally and in tests, `STORAGE_PROVIDER=memory`
 keeps uploads in RAM, so no bucket is needed. A production bucket also needs a
 public read policy or CDN origin access so the returned image URLs are visible
 to buyers.
+
+Chunk 11 adds the public browse feed and listing detail pages. Both work for
+signed-out guests and need no extra credentials beyond the storage bucket above.
 

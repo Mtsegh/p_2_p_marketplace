@@ -232,6 +232,14 @@ uploads in RAM so no S3 account is needed; production uses `STORAGE_PROVIDER=s3`
 with the `S3_*` variables in `server/.env.example`. Image type and size are
 validated at presign time on the server and again in the browser before upload.
 
+Guests can browse published listings at `/browse` without signing in. The first
+page is server-rendered for a fast first paint; "Load more" uses TanStack Query
+to append the next cursor page without a navigation, preserving scroll position.
+Each listing has a detail page at `/listings/<id>` with an image gallery
+(keyboard arrows on desktop, swipe on touch), price, attributes, description, a
+seller trust card, and similar items from the same category. Both pages set SEO
+metadata (title, description, and an Open Graph image on the detail page).
+
 
 ### Continuous integration
 

@@ -164,10 +164,11 @@ export async function publishListing(listingId: string, userId: string) {
 export async function listActiveListings(query: ListListingsQuery) {
   const listings = await repository.listActiveListings(query);
 
+  // The repository fetches limit+1 rows. The cursor must be the last row we
+  // actually return (index limit-1), because the next query uses skip:1 to skip
+  // the cursor row. Using the probe row at index `limit` would skip it forever.
   const nextCursor =
-    listings.length > query.limit
-      ? listings[query.limit]!.id
-      : null;
+    listings.length > query.limit ? listings[query.limit - 1]!.id : null;
 
   return {
     listings: listings
@@ -189,8 +190,7 @@ export async function listListingsByOwner(
     cursor,
   });
 
-  const nextCursor =
-    listings.length > limit ? listings[limit]!.id : null;
+  const nextCursor = listings.length > limit ? listings[limit - 1]!.id : null;
 
   return {
     listings: listings

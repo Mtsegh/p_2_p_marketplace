@@ -7,6 +7,32 @@ import type {
 import type { ListListingsQuery } from "./listing.schemas.js";
 
 /**
+ * Every listing read includes the same relations so `toListingDto` can always
+ * rely on `owner`, `category`, and `images` being present. An earlier version
+ * omitted images from the list queries while the DTO mapped them, which made
+ * the public browse endpoint throw a 500.
+ */
+const LISTING_INCLUDE = {
+  owner: { select: { id: true, profile: true } },
+  category: { select: { id: true, name: true, slug: true } },
+  images: {
+    select: {
+      id: true,
+      key: true,
+      url: true,
+      mimeType: true,
+      sizeBytes: true,
+      width: true,
+      height: true,
+      position: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+    orderBy: { position: "asc" as const },
+  },
+} as const;
+
+/**
  * Data access for listings. Services own business rules; this module only talks
  * to Prisma and keeps transaction handling close to the writes that must be
  * atomic.
@@ -35,50 +61,14 @@ export function createListing(data: {
       status: data.status,
       location: data.location,
     },
-    include: {
-      owner: { select: { id: true, profile: true } },
-      category: { select: { id: true, name: true, slug: true } },
-      images: {
-        select: {
-          id: true,
-          key: true,
-          url: true,
-          mimeType: true,
-          sizeBytes: true,
-          width: true,
-          height: true,
-          position: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-        orderBy: { position: "asc" },
-      },
-    },
+    include: LISTING_INCLUDE,
   });
 }
 
 export function findListingById(listingId: string) {
   return prisma.listing.findUnique({
     where: { id: listingId },
-    include: {
-      owner: { select: { id: true, profile: true } },
-      category: { select: { id: true, name: true, slug: true } },
-      images: {
-        select: {
-          id: true,
-          key: true,
-          url: true,
-          mimeType: true,
-          sizeBytes: true,
-          width: true,
-          height: true,
-          position: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-        orderBy: { position: "asc" },
-      },
-    },
+    include: LISTING_INCLUDE,
   });
 }
 
@@ -111,25 +101,7 @@ export function updateListing(
       }),
       ...(data.location !== undefined && { location: data.location }),
     },
-    include: {
-      owner: { select: { id: true, profile: true } },
-      category: { select: { id: true, name: true, slug: true } },
-      images: {
-        select: {
-          id: true,
-          key: true,
-          url: true,
-          mimeType: true,
-          sizeBytes: true,
-          width: true,
-          height: true,
-          position: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-        orderBy: { position: "asc" },
-      },
-    },
+    include: LISTING_INCLUDE,
   });
 }
 
@@ -180,10 +152,7 @@ export function listActiveListings(query: ListListingsQuery) {
     take: query.limit + 1,
     cursor: query.cursor ? { id: query.cursor } : undefined,
     skip: query.cursor ? 1 : 0,
-    include: {
-      owner: { select: { id: true, profile: true } },
-      category: { select: { id: true, name: true, slug: true } },
-    },
+    include: LISTING_INCLUDE,
   });
 }
 
@@ -200,10 +169,7 @@ export function listListingsByOwner(
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: limit + 1,
     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-    include: {
-      owner: { select: { id: true, profile: true } },
-      category: { select: { id: true, name: true, slug: true } },
-    },
+    include: LISTING_INCLUDE,
   });
 }
 

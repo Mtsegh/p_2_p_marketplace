@@ -66,6 +66,8 @@ const modifyImageLimit = rateLimit({
   key: userKey,
 });
 
+// Static paths MUST be registered before "/:listingId", otherwise Express
+// matches "categories" as a listing id and validation rejects it with 422.
 listingRouter.post(
   "/",
   requireTrustedOrigin,
@@ -79,6 +81,21 @@ listingRouter.get(
   "/",
   publicListingsLimit,
   controller.listListings,
+);
+
+listingRouter.get(
+  "/categories",
+  publicCategoriesLimit,
+  controller.listCategories,
+);
+
+listingRouter.post(
+  "/categories",
+  requireTrustedOrigin,
+  requireAuth,
+  requireRole("ADMIN"),
+  createListingLimit,
+  controller.createCategory,
 );
 
 listingRouter.get(
@@ -142,20 +159,4 @@ listingRouter.patch(
   requireAuth,
   modifyImageLimit,
   imageController.reorderListingImages,
-);
-
-// Categories are public to read, admin-only to write.
-listingRouter.get(
-  "/categories",
-  publicCategoriesLimit,
-  controller.listCategories,
-);
-
-listingRouter.post(
-  "/categories",
-  requireTrustedOrigin,
-  requireAuth,
-  requireRole("ADMIN"),
-  createListingLimit,
-  controller.createCategory,
 );
