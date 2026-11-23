@@ -1,6 +1,8 @@
 import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../db/prisma.js";
 import { AppError } from "../../lib/app-error.js";
+import { logger } from "../../lib/logger.js";
+import { notifyDealEvent, type DealEvent } from "../notifications/deal-notifications.service.js";
 import * as repository from "./deal.repository.js";
 import { actorFor, assertTransition } from "./deal-state-machine.js";
 import type {
@@ -8,6 +10,20 @@ import type {
   CreateProposalInput,
   ListDealsQuery,
 } from "./deal.schemas.js";
+
+/** Notifications never block a deal state change. */
+async function notify(input: {
+  dealId: string;
+  event: DealEvent;
+  recipientId: string;
+  listingTitle: string;
+}): Promise<void> {
+  try {
+    await notifyDealEvent(input);
+  } catch (error) {
+    logger.error({ err: error, ...input }, "could not send deal notification");
+  }
+}
 
 /** Shared guards for any proposal: verified email, active listing, not own listing. */
 async function validateProposer(
@@ -30,7 +46,7 @@ async function validateProposer(
 
   const listing = await prisma.listing.findUnique({
     where: { id: listingId },
-    select: { id: true, ownerId: true, status: true, listingType: true },
+    select: { id: true, ownerId: true, status: true, listingType: true, title: true },
   });
 
   if (!listing) {
@@ -96,12 +112,21 @@ export async function createProposal(buyerId: string, input: CreateProposalInput
   const listing = await validateProposer(buyerId, input.listingId, true);
 
   try {
-    return await repository.createProposal({
+    const deal = await repository.createProposal({
       listingId: listing.id,
       buyerId,
       sellerId: listing.ownerId,
       amountCents: input.amountCents,
     });
+
+    await notify({
+      dealId: deal.id,
+      event: "proposal_received",
+      recipientId: listing.ownerId,
+      listingTitle: listing.title ?? "your listing",
+    });
+
+    return deal;
   } catch (error) {
     translateDuplicate(error);
   }
@@ -166,6 +191,13 @@ export async function createExchangeProposal(
       throw AppError.notFound("Deal not found after creation");
     }
 
+    await notify({
+      dealId: created.id,
+      event: "proposal_received",
+      recipientId: listing.ownerId,
+      listingTitle: listing.title ?? "your listing",
+    });
+
     return created;
   } catch (error) {
     translateDuplicate(error);
@@ -220,6 +252,13 @@ export async function acceptDeal(dealId: string, userId: string) {
     );
   }
 
+  await notify({
+    dealId: deal.id,
+    event: "proposal_accepted",
+    recipientId: deal.buyerId,
+    listingTitle: deal.listing?.title ?? "your listing",
+  });
+
   return updated;
 }
 
@@ -262,6 +301,13 @@ export async function endDeal(
       "This deal can no longer be changed",
     );
   }
+
+  await notify({
+    dealId: deal.id,
+    event: toStatus === "REJECTED" ? "proposal_rejected" : "deal_cancelled",
+    recipientId: toStatus === "REJECTED" ? deal.buyerId : deal.sellerId,
+    listingTitle: deal.listing?.title ?? "your listing",
+  });
 
   return updated;
 }

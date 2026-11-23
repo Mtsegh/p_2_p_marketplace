@@ -1,6 +1,8 @@
 import { prisma } from "../../db/prisma.js";
 import { env } from "../../config/env.js";
 import { AppError } from "../../lib/app-error.js";
+import { logger } from "../../lib/logger.js";
+import { notifyDealEvent } from "../notifications/deal-notifications.service.js";
 import { testPaymentProvider } from "./payment.provider.js";
 import * as repository from "./payment.repository.js";
 import type { WebhookPayload } from "./payment.schemas.js";
@@ -151,6 +153,29 @@ export async function handleWebhook(payload: WebhookPayload) {
 
     return applied;
   });
+
+  // Notify both sides once funds are secured (idempotent notification keys).
+  if (!result.alreadyProcessed && result.transaction) {
+    try {
+      const deal = await prisma.deal.findUnique({
+        where: { id: result.transaction.dealId },
+        select: { buyerId: true, sellerId: true, listing: { select: { title: true } } },
+      });
+
+      if (deal) {
+        for (const recipientId of [deal.buyerId, deal.sellerId]) {
+          await notifyDealEvent({
+            dealId: result.transaction.dealId,
+            event: "funds_secured",
+            recipientId,
+            listingTitle: deal.listing.title,
+          });
+        }
+      }
+    } catch (error) {
+      logger.error({ err: error }, "could not send funds-secured notifications");
+    }
+  }
 
   return {
     alreadyProcessed: result.alreadyProcessed,

@@ -812,6 +812,20 @@ is gateway-private and never appears in public user data.
 A seller who is not onboarded cannot accept a paid deal (`403
 PAYOUT_NOT_ONBOARDED`).
 
+## Deal and payment emails
+
+Transactional emails are queued through the existing BullMQ email worker and
+sent once per event. A `notification_events` row keyed by
+`deal:event:recipient` makes every notification idempotent, so a replayed
+webhook or retried transition never duplicates a message. Email delivery
+failures are logged and never block a deal state change.
+
+Emails are sent for: new proposal (seller), proposal accepted (buyer), proposal
+rejected (buyer), deal cancelled (counterparty), funds secured (both parties),
+handoff completed (both parties), and refund issued (buyer). Every message uses
+the shared transactional layout with a plain-text fallback and never contains
+tokens or payment secrets.
+
 ### Listing images
 
 Images are uploaded directly to S3-compatible storage using presigned URLs. The

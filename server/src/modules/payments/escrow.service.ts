@@ -1,4 +1,6 @@
 import { prisma } from "../../db/prisma.js";
+import { logger } from "../../lib/logger.js";
+import { notifyDealEvent } from "../notifications/deal-notifications.service.js";
 import { testPaymentProvider } from "./payment.provider.js";
 
 /**
@@ -73,6 +75,25 @@ export async function processExpiredEscrows(now = new Date()) {
         });
       }
     });
+
+    // Notify the buyer that the funds are back.
+    try {
+      const refundDeal = await prisma.deal.findUnique({
+        where: { id: deal.id },
+        select: { buyerId: true, listing: { select: { title: true } } },
+      });
+
+      if (refundDeal) {
+        await notifyDealEvent({
+          dealId: deal.id,
+          event: "refund_issued",
+          recipientId: refundDeal.buyerId,
+          listingTitle: refundDeal.listing.title,
+        });
+      }
+    } catch (error) {
+      logger.error({ err: error }, "could not send refund notification");
+    }
 
     processed += 1;
   }

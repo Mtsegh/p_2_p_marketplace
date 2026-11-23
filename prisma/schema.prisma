@@ -247,6 +247,16 @@ model WebhookEvent {
   @@map("webhook_events")
 }
 
+/// Ensures a deal/payment notification is sent at most once per event+recipient.
+model NotificationEvent {
+  id          String   @id @default(uuid()) @db.Uuid
+  eventKey    String   @unique @map("event_key") @db.VarChar(200)
+  recipientId String   @map("recipient_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@map("notification_events")
+}
+
 /// Public profile data, split from `User` so a public read can never select the
 /// email or password hash by accident. One row per account, created with it.
 /// Avatar upload arrives in chunk 10; until then the UI draws initials.

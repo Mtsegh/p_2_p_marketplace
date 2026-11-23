@@ -4,6 +4,8 @@ import { prisma } from "../../db/prisma.js";
 import { sha256Hex } from "../../lib/hash.js";
 import { AppError } from "../../lib/app-error.js";
 import { testPaymentProvider } from "../payments/payment.provider.js";
+import { logger } from "../../lib/logger.js";
+import { notifyDealEvent } from "../notifications/deal-notifications.service.js";
 
 /** Formats a 6-digit code as "482 915" for readability. */
 export function formatCode(code: string): string {
@@ -186,6 +188,26 @@ export async function completeHandoff(
 
     return updated;
   });
+
+  try {
+    const completedDeal = await prisma.deal.findUnique({
+      where: { id: deal.id },
+      select: { buyerId: true, sellerId: true, listing: { select: { title: true } } },
+    });
+
+    if (completedDeal) {
+      for (const recipientId of [completedDeal.buyerId, completedDeal.sellerId]) {
+        await notifyDealEvent({
+          dealId: deal.id,
+          event: "handoff_completed",
+          recipientId,
+          listingTitle: completedDeal.listing.title,
+        });
+      }
+    }
+  } catch (error) {
+    logger.error({ err: error }, "could not send handoff-completed notifications");
+  }
 
   return { id: result.id, status: result.status };
 }
