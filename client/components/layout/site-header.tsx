@@ -17,6 +17,7 @@ const navItems = [
   { href: "/sell", label: "Sell" },
   { href: "/deals", label: "Deals" },
   { href: "/profile", label: "Profile" },
+  { href: "/admin", label: "Admin" },
 ];
 
 function isActive(pathname: string, href: string, exact?: boolean): boolean {

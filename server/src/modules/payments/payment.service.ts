@@ -1,8 +1,8 @@
 import { prisma } from "../../db/prisma.js";
-import { env } from "../../config/env.js";
 import { AppError } from "../../lib/app-error.js";
 import { logger } from "../../lib/logger.js";
 import { notifyDealEvent } from "../notifications/deal-notifications.service.js";
+import { getEffectiveSettings } from "../admin/admin.settings.js";
 import { testPaymentProvider } from "./payment.provider.js";
 import * as repository from "./payment.repository.js";
 import type { WebhookPayload } from "./payment.schemas.js";
@@ -74,12 +74,14 @@ export async function createCheckout(userId: string, dealId: string) {
     idempotencyKey: deal.id,
   });
 
+  const settings = await getEffectiveSettings();
+
   await repository.createTransaction({
     dealId: deal.id,
     provider: testPaymentProvider.name,
     providerPaymentId: intent.providerPaymentId,
     amountCents: intent.amountCents,
-    feeCents: Math.round((intent.amountCents * env.PLATFORM_FEE_BPS) / 10000),
+    feeCents: Math.round((intent.amountCents * settings.platformFeeBps) / 10000),
     currency: intent.currency,
   });
 
@@ -126,8 +128,9 @@ export async function handleWebhook(payload: WebhookPayload) {
       });
 
       if (deal && deal.status === "ACCEPTED") {
+        const settings = await getEffectiveSettings();
         const escrowExpiresAt = new Date(
-          Date.now() + env.ESCROW_WINDOW_DAYS * 86_400_000,
+          Date.now() + settings.escrowWindowDays * 86_400_000,
         );
 
         await tx.deal.update({

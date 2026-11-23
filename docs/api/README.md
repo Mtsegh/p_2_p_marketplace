@@ -933,3 +933,39 @@ Administrators only (`ADMIN` role, enforced server-side).
 
 `nextCursor` is `null` on the last page. User objects never include the password
 hash.
+
+### Admin dashboard endpoints
+
+All endpoints below require the `ADMIN` role. Every mutation writes an
+append-only audit entry with the actor, action, target, and before/after values.
+
+#### `PATCH /api/v1/admin/users/:userId`
+
+Body: `{ "status": "ACTIVE" | "SUSPENDED" }`. Cannot suspend yourself.
+Suspending also revokes all of the user's active sessions. `422 SELF_ACTION`
+when targeting your own account.
+
+#### `GET /api/v1/admin/listings`
+
+Query: `status`, `limit`, `cursor`. Returns a paginated overview of listings
+across all statuses.
+
+#### `PATCH /api/v1/admin/listings/:listingId`
+
+Body: `{ "action": "remove" | "restore", "reason"?: string }`. `remove` moves a
+listing to `REMOVED`; `restore` only works on removed listings.
+
+#### `GET /api/v1/admin/settings`
+
+Returns `{ "data": { "settings": { "platformFeeBps", "escrowWindowDays" } } }`.
+Values come from the database, falling back to the environment defaults.
+
+#### `PATCH /api/v1/admin/settings`
+
+Body: at least one of `platformFeeBps` (0-5000) or `escrowWindowDays` (1-90).
+Changes take effect immediately for new checkouts and escrow windows.
+
+#### `GET /api/v1/admin/audit`
+
+Query: `limit`, `cursor`. Returns newest-first audit events with `action`,
+`targetType`, `targetId`, `before`, `after`, `actorId`, and `createdAt`.
