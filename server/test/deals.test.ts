@@ -48,6 +48,53 @@ function propose(token: string, listingId: string, amountCents = 9000) {
   );
 }
 
+async function swapSetup() {
+  const base = await setup();
+  await prisma.listing.update({
+    where: { id: base.listing.id },
+    data: { listingType: "BOTH", priceCents: null },
+  });
+  const offered = await prisma.listing.createManyAndReturn({
+    data: [
+      {
+        ownerId: base.buyer.id,
+        title: "Buyer item 1",
+        description: "Offered in swap",
+        location: "Lagos",
+        status: "ACTIVE",
+        listingType: "EXCHANGE",
+      },
+      {
+        ownerId: base.buyer.id,
+        title: "Buyer item 2",
+        description: "Offered in swap",
+        location: "Lagos",
+        status: "ACTIVE",
+        listingType: "EXCHANGE",
+      },
+    ],
+  });
+  return { ...base, offered };
+}
+
+function exchange(
+  token: string,
+  listingId: string,
+  offeredListingIds: string[],
+  topUpCents?: number,
+) {
+  return auth(token)(
+    request(app)
+      .post("/api/v1/deals/exchange")
+      .set("Origin", "http://localhost:3000")
+      .send({
+        listingId,
+        offeredListingIds,
+        ...(topUpCents !== undefined ? { topUpCents } : {}),
+      }),
+  );
+}
+
 describe("POST /api/v1/deals", () => {
   it("creates a PROPOSED sale deal with a history entry", async () => {
     const { buyer, listing } = await setup();
@@ -241,49 +288,6 @@ describe("GET /api/v1/deals", () => {
 });
 
 describe("exchange proposals", () => {
-  async function swapSetup() {
-    const base = await setup();
-
-    // Make the target listing exchange-capable.
-    await prisma.listing.update({
-      where: { id: base.listing.id },
-      data: { listingType: "BOTH", priceCents: null },
-    });
-
-    // Two active listings owned by the buyer, offered in return.
-    const offered = await prisma.listing.createManyAndReturn({
-      data: [
-        {
-          ownerId: base.buyer.id,
-          title: "Buyer item 1",
-          description: "Offered in swap",
-          location: "Lagos",
-          status: "ACTIVE",
-          listingType: "EXCHANGE",
-        },
-        {
-          ownerId: base.buyer.id,
-          title: "Buyer item 2",
-          description: "Offered in swap",
-          location: "Lagos",
-          status: "ACTIVE",
-          listingType: "EXCHANGE",
-        },
-      ],
-    });
-
-    return { ...base, offered };
-  }
-
-  function exchange(token: string, listingId: string, offeredListingIds: string[], topUpCents?: number) {
-    return auth(token)(
-      request(app)
-        .post("/api/v1/deals/exchange")
-        .set("Origin", "http://localhost:3000")
-        .send({ listingId, offeredListingIds, ...(topUpCents !== undefined ? { topUpCents } : {}) }),
-    );
-  }
-
   it("creates an exchange proposal with offered listings and a top-up", async () => {
     const { buyer, listing, offered } = await swapSetup();
 
@@ -345,6 +349,87 @@ describe("exchange proposals", () => {
     expect(statuses.every((item) => item.status === "RESERVED")).toBe(true);
   });
 
+  it("allows only participants to read and write the deal thread", async () => {
+    const { seller, buyer, listing } = await setup();
+    const deal = await propose(buyer.accessToken, listing.id).expect(201);
+    const dealId = deal.body.data.deal.id;
+    const stranger = await registerUser(app);
+
+    // A stranger cannot read or post.
+    await auth(stranger.accessToken)(
+      request(app).get(`/api/v1/deals/${dealId}/messages`),
+    ).expect(403);
+    await auth(stranger.accessToken)(
+      request(app)
+        .post(`/api/v1/deals/${dealId}/messages`)
+        .set("Origin", "http://localhost:3000")
+        .send({ body: "intruder" }),
+    ).expect(403);
+
+    // Buyer posts, seller reads.
+    const posted = await auth(buyer.accessToken)(
+      request(app)
+        .post(`/api/v1/deals/${dealId}/messages`)
+        .set("Origin", "http://localhost:3000")
+        .send({ body: "Where should we meet?" }),
+    ).expect(201);
+    expect(posted.body.data.message.body).toBe("Where should we meet?");
+
+    const thread = await auth(seller.accessToken)(
+      request(app).get(`/api/v1/deals/${dealId}/messages`),
+    ).expect(200);
+    expect(thread.body.data.messages).toHaveLength(1);
+    expect(thread.body.data.messages[0].body).toBe("Where should we meet?");
+  });
+
+  it("validates message bodies", async () => {
+    const { buyer, listing } = await setup();
+    const deal = await propose(buyer.accessToken, listing.id).expect(201);
+
+    await auth(buyer.accessToken)(
+      request(app)
+        .post(`/api/v1/deals/${deal.body.data.deal.id}/messages`)
+        .set("Origin", "http://localhost:3000")
+        .send({ body: "" }),
+    ).expect(422);
+  });
+});
+
+describe("deal messages pagination", () => {
+  it("pages through messages oldest-first", async () => {
+    const { seller, buyer, listing } = await setup();
+    const deal = await propose(buyer.accessToken, listing.id).expect(201);
+    const dealId = deal.body.data.deal.id;
+
+    for (let i = 1; i <= 5; i += 1) {
+      await auth(buyer.accessToken)(
+        request(app)
+          .post(`/api/v1/deals/${dealId}/messages`)
+          .set("Origin", "http://localhost:3000")
+          .send({ body: `Message ${i}` }),
+      ).expect(201);
+    }
+
+    const seen: string[] = [];
+    let cursor: string | undefined;
+
+    do {
+      const response = await auth(seller.accessToken)(
+        request(app)
+          .get(`/api/v1/deals/${dealId}/messages`)
+          .query({ limit: 2, ...(cursor ? { cursor } : {}) }),
+      ).expect(200);
+
+      seen.push(...response.body.data.messages.map((m: { id: string }) => m.id));
+      cursor = response.body.data.nextCursor ?? undefined;
+    } while (cursor);
+
+    expect(seen).toHaveLength(5);
+    expect(new Set(seen).size).toBe(5);
+  });
+});
+
+describe("exchange competing proposals", () => {
   it("rejects a competing proposal touching an offered listing", async () => {
     const { seller, buyer, listing, offered } = await swapSetup();
     const anotherBuyer = await registerUser(app);

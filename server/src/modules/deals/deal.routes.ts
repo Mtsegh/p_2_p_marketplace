@@ -3,6 +3,7 @@ import { rateLimit, userKey } from "../../lib/rate-limit.js";
 import { requireTrustedOrigin } from "../../middleware/trusted-origin.js";
 import { requireAuth, requireVerifiedEmail } from "../auth/auth.middleware.js";
 import * as controller from "./deal.controller.js";
+import * as messageController from "./message.controller.js";
 
 export const dealRouter = Router();
 
@@ -84,4 +85,20 @@ dealRouter.post(
   requireAuth,
   modifyLimit,
   controller.cancelDeal,
+);
+
+// Deal thread: only participants can read/write (checked in the service).
+dealRouter.get(
+  "/:dealId/messages",
+  requireAuth,
+  readLimit,
+  messageController.listMessages,
+);
+
+dealRouter.post(
+  "/:dealId/messages",
+  requireTrustedOrigin,
+  requireAuth,
+  modifyLimit,
+  messageController.postMessage,
 );

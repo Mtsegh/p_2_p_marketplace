@@ -8,6 +8,7 @@ import {
   formatDealAmount,
 } from "@/lib/deals-api";
 import { Badge } from "@/components/ui/badge";
+import { DealThread } from "@/components/deals/deal-thread";
 import { Alert } from "@/components/ui/alert";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useQuery } from "@tanstack/react-query";
@@ -94,6 +95,8 @@ function DealDetail({ dealId, userId }: { dealId: string; userId: string }) {
           ))}
         </ol>
       </section>
+
+      <DealThread dealId={deal.id} />
     </div>
   );
 }

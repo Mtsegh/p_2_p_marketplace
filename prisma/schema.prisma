@@ -62,6 +62,8 @@ model User {
   soldDeals   Deal[] @relation("SellerDeals")
   /// Actors recorded in deal history.
   dealEvents DealHistory[]
+  /// Messages authored by this user in deal threads.
+  dealMessages DealMessage[]
 
   @@map("users")
 }
@@ -108,6 +110,8 @@ model Deal {
   history DealHistory[]
   /// Listings the proposer offers in an exchange deal (their own items).
   offeredListings DealOfferedListing[]
+  /// Messages between the two participants for arranging the handoff.
+  messages DealMessage[]
 
   @@index([listingId])
   @@index([buyerId])
@@ -147,6 +151,22 @@ model DealHistory {
 
   @@index([dealId])
   @@map("deal_history")
+}
+
+/// A message in a deal's thread. Only the deal's buyer and seller can read or
+/// write messages, enforced in the service layer.
+model DealMessage {
+  id        String   @id @default(uuid()) @db.Uuid
+  dealId    String   @map("deal_id") @db.Uuid
+  senderId  String   @map("sender_id") @db.Uuid
+  body      String   @map("body") @db.Text
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  deal   Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  sender User @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([dealId, createdAt])
+  @@map("deal_messages")
 }
 
 /// Public profile data, split from `User` so a public read can never select the

@@ -259,6 +259,10 @@ Exchange proposals let a buyer offer one or more of their own active listings
 (plus an optional cash top-up) for an item. Accepting a swap reserves every
 listing involved and rejects competing proposals on any of them.
 
+Each deal has a message thread for arranging the meetup. Only the buyer and
+seller can read or write messages, and the thread appears on the deal detail
+page alongside the state-change history.
+
 
 ### Continuous integration
 

@@ -705,7 +705,24 @@ Seller only. Moves a `PROPOSED` deal to `REJECTED`. `200` with the updated deal.
 Buyer only. Moves a `PROPOSED` deal to `CANCELLED`. `200` with the updated deal.
 
 A `DealDto` includes the listing title, both participants and their display
-names, type, amount, status, timestamps, and the history array.
+names, type, amount, status, timestamps, the history array, and (for swaps) the
+offered listings.
+
+### Deal thread
+
+Each deal has a message thread for arranging the handoff. Only the buyer and
+seller may read or post; the service checks participant access on every call.
+
+#### `GET /api/v1/deals/:dealId/messages`
+
+Query: `limit` (default 50), `cursor`. `200` with
+`{ "data": { "messages": [<DealMessage>], "nextCursor": "..." } }`, oldest first.
+
+#### `POST /api/v1/deals/:dealId/messages`
+
+Body: `{ "body": "<1-2000 chars>" }`. `201` with `{ "data": { "message": <DealMessage> } }`.
+
+A `DealMessage` has `id`, `dealId`, `senderId`, `body`, and `createdAt`.
 
 ### Listing images
 

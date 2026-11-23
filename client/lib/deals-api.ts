@@ -20,6 +20,19 @@ export interface DealHistoryItem {
   createdAt: string;
 }
 
+export interface DealMessage {
+  id: string;
+  dealId: string;
+  senderId: string;
+  body: string;
+  createdAt: string;
+}
+
+export interface MessageListResult {
+  messages: DealMessage[];
+  nextCursor: string | null;
+}
+
 export interface OfferedListing {
   listingId: string;
   listingTitle: string;
@@ -111,6 +124,35 @@ function transition(dealId: string, action: string): Promise<Deal> {
     `/api/v1/deals/${encodeURIComponent(dealId)}/${action}`,
     "POST",
   ).then((response) => response.data.deal);
+}
+
+/** Lists a deal's messages, oldest first. */
+export async function fetchDealMessages(
+  dealId: string,
+  cursor?: string,
+): Promise<MessageListResult> {
+  const params = new URLSearchParams();
+  if (cursor) params.set("cursor", cursor);
+
+  const response = await apiRequest<{ data: MessageListResult }>(
+    `/api/v1/deals/${encodeURIComponent(dealId)}/messages?${params.toString()}`,
+  );
+
+  return response.data;
+}
+
+/** Posts a message to a deal's thread. */
+export async function postDealMessage(
+  dealId: string,
+  body: string,
+): Promise<DealMessage> {
+  const response = await apiRequestJson<{ data: { message: DealMessage } }>(
+    `/api/v1/deals/${encodeURIComponent(dealId)}/messages`,
+    "POST",
+    { body },
+  );
+
+  return response.data.message;
 }
 
 export const acceptDeal = (dealId: string) => transition(dealId, "accept");
