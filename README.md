@@ -263,6 +263,16 @@ Each deal has a message thread for arranging the meetup. Only the buyer and
 seller can read or write messages, and the thread appears on the deal detail
 page alongside the state-change history.
 
+Payments sit behind a `PaymentProvider` interface so gateways are swappable; the
+current `test` provider issues fake hosted-checkout URLs. The buyer of an
+accepted sale deal pays from the deal page, creating a `PENDING` transaction.
+The gateway's signed webhook is the source of truth: verifying the HMAC over the
+raw body and recording each event ID makes handlers idempotent, so a replayed
+webhook changes nothing. A genuine success marks the transaction `SUCCEEDED` and
+moves the deal to `PAYMENT_PENDING`. All money is integer cents with an explicit
+currency. See `docs/payments.md` (added with escrow in a later chunk) for the
+fee and payout policy.
+
 
 ### Continuous integration
 

@@ -57,7 +57,16 @@ export function createApp(): express.Express {
       },
     }),
   );
-  app.use(express.json({ limit: "100kb" }));
+  // Keep the raw body so webhook signatures can be verified over the exact
+  // bytes the gateway signed. Only webhook routes use it; other routes ignore it.
+  app.use(
+    express.json({
+      limit: "100kb",
+      verify: (req, _res, buf) => {
+        (req as typeof req & { rawBody?: Buffer }).rawBody = Buffer.from(buf);
+      },
+    }),
+  );
 
   app.get("/", (_req, res) => {
     res.json({

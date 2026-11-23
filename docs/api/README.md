@@ -186,6 +186,12 @@ is treated as token theft and the whole token family is revoked.
 | `ORIGIN_NOT_ALLOWED`     | 403    | Browser write came from an origin other than `CLIENT_URL`                                           |
 | `RATE_LIMITED`           | 429    | Too many attempts; `Retry-After` says how many seconds to wait                                      |
 | `NOT_FOUND`              | 404    | The resource does not exist or is not visible to this caller                                        |
+| `INVALID_SIGNATURE`      | 401    | A payment webhook had a missing or invalid HMAC signature                                           |
+| `INVALID_TRANSITION`     | 409    | A deal state change is not allowed by the state machine                                             |
+| `PROPOSAL_EXISTS`        | 409    | The buyer already has a pending proposal on the listing                                             |
+| `LISTING_NOT_AVAILABLE`  | 409    | The listing is no longer active / is already part of a deal                                         |
+| `INVALID_STATUS`         | 409    | The deal is in the wrong state for the requested action                                             |
+| `NOT_A_SALE_DEAL`        | 422    | The deal has no price (exchange deals are not paid through checkout)                               |
 
 ### Rate limits
 
@@ -723,6 +729,50 @@ Query: `limit` (default 50), `cursor`. `200` with
 Body: `{ "body": "<1-2000 chars>" }`. `201` with `{ "data": { "message": <DealMessage> } }`.
 
 A `DealMessage` has `id`, `dealId`, `senderId`, `body`, and `createdAt`.
+
+## Payments
+
+Payments go through the `PaymentProvider` interface (`createPayment`, `capture`,
+`refund`, `payout`), swappable without touching callers. The current `test`
+provider issues deterministic fake checkout URLs; no real card data ever
+reaches the API — the buyer uses hosted checkout. All amounts are integer
+minor units (cents) with an explicit currency. The webhook is the source of
+truth for payment state.
+
+### `POST /api/v1/payments/checkout`
+
+Requires `Authorization` and a trusted `Origin`; only the **buyer** of an
+`ACCEPTED` sale deal may call it. Body: `{ "dealId": "<uuid>" }`. `201` with
+`{ "data": { "checkoutUrl", "amountCents", "currency", "provider" } }`. Creates
+a `PENDING` transaction; retries reuse it (idempotent).
+
+### `GET /api/v1/payments/transaction?dealId=<uuid>`
+
+`200` with the latest `Transaction` for the deal, or `404` if none.
+
+### `GET /api/v1/payments/transactions`
+
+`200` with all transactions where the caller is buyer or seller.
+
+A `Transaction` has `id`, `dealId`, `provider`, `providerPaymentId`,
+`amountCents`, `feeCents`, `currency`, `status` (`PENDING`, `SUCCEEDED`,
+`FAILED`, `REFUNDED`), and timestamps.
+
+### `POST /api/v1/payments/webhook`
+
+No session — the HMAC signature over the **raw body** is the credential. Header
+`x-webhook-signature` is the hex HMAC-SHA256 of the body using `WEBHOOK_SECRET`.
+Body:
+
+```json
+{ "id": "evt_...", "type": "payment.succeeded", "data": { "providerPaymentId": "..." } }
+```
+
+`200` with `{ "data": { "received": true, "alreadyProcessed": boolean, "changed": boolean } }`.
+Handlers are idempotent: the unique `providerEventId` is recorded once, and a
+replayed event changes nothing. A genuine `payment.succeeded` marks the
+transaction `SUCCEEDED` and moves the deal to `PAYMENT_PENDING` with a history
+entry, atomically. Invalid signatures return `401 INVALID_SIGNATURE`.
 
 ### Listing images
 

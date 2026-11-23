@@ -112,6 +112,8 @@ model Deal {
   offeredListings DealOfferedListing[]
   /// Messages between the two participants for arranging the handoff.
   messages DealMessage[]
+  /// Payment transactions for this deal.
+  transactions Transaction[]
 
   @@index([listingId])
   @@index([buyerId])
@@ -167,6 +169,47 @@ model DealMessage {
 
   @@index([dealId, createdAt])
   @@map("deal_messages")
+}
+
+/// The lifecycle of a payment for a sale deal. All amounts are integer minor
+/// units (cents) with an explicit currency; no floating point money.
+enum TransactionStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+model Transaction {
+  id              String            @id @default(uuid()) @db.Uuid
+  dealId          String            @map("deal_id") @db.Uuid
+  provider        String            @map("provider") @db.VarChar(50)
+  providerPaymentId String          @unique @map("provider_payment_id") @db.VarChar(200)
+  amountCents     Int               @map("amount_cents")
+  feeCents        Int               @default(0) @map("fee_cents")
+  currency        String            @default("USD") @map("currency") @db.VarChar(3)
+  status          TransactionStatus @default(PENDING) @map("status")
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@index([dealId])
+  @@index([status])
+  @@map("transactions")
+}
+
+/// A processed gateway webhook event. The unique provider_event_id makes
+/// handlers idempotent: a replayed event is recorded once and ignored.
+model WebhookEvent {
+  id               String   @id @default(uuid()) @db.Uuid
+  providerEventId  String   @unique @map("provider_event_id") @db.VarChar(200)
+  provider         String   @map("provider") @db.VarChar(50)
+  type             String   @map("type") @db.VarChar(100)
+  payload          Json     @map("payload")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@map("webhook_events")
 }
 
 /// Public profile data, split from `User` so a public read can never select the

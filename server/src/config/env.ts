@@ -75,6 +75,8 @@ const envSchema = z
     S3_PUBLIC_URL: z.string().trim().min(1).optional(),
     /** How long presigned PUT URLs are valid, in seconds. */
     S3_PRESIGN_TTL_SECONDS: z.coerce.number().int().min(60).max(86_400).default(900),
+    /** Shared secret for verifying gateway webhook signatures. */
+    WEBHOOK_SECRET: z.string().min(16).default("test-only-webhook-secret-change-me"),
     EMAIL_FROM_ADDRESS: z
       .string()
       .trim()

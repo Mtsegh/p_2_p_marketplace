@@ -9,6 +9,7 @@ import {
 } from "@/lib/deals-api";
 import { Badge } from "@/components/ui/badge";
 import { DealThread } from "@/components/deals/deal-thread";
+import { PaymentPanel } from "@/components/deals/payment-panel";
 import { Alert } from "@/components/ui/alert";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useQuery } from "@tanstack/react-query";
@@ -95,6 +96,14 @@ function DealDetail({ dealId, userId }: { dealId: string; userId: string }) {
           ))}
         </ol>
       </section>
+
+      <PaymentPanel
+        dealId={deal.id}
+        isBuyer={deal.buyerId === userId}
+        dealStatus={deal.status}
+        isSale={deal.type === "SALE"}
+        amountCents={deal.amountCents}
+      />
 
       <DealThread dealId={deal.id} />
     </div>
