@@ -3,11 +3,13 @@ import { AppError } from "../../lib/app-error.js";
 import { parseInput } from "../../lib/validate.js";
 import { toTransactionDto } from "./payment.dto.js";
 import * as service from "./payment.service.js";
+import * as payoutService from "./payout.service.js";
 import {
   createCheckoutSchema,
   transactionQuerySchema,
   webhookPayloadSchema,
 } from "./payment.schemas.js";
+import { onboardSchema } from "./payout.schemas.js";
 import { assertValidSignature } from "./webhook-signature.js";
 
 /** Raw body captured by express.json's verify callback (see app.ts). */
@@ -37,6 +39,19 @@ export const getTransaction: RequestHandler = async (req, res) => {
   }
 
   res.json({ data: { transaction: toTransactionDto(tx) }, meta: { requestId: req.id } });
+};
+
+export const onboardPayout: RequestHandler = async (req, res) => {
+  const input = parseInput(onboardSchema, req.body);
+  const result = await payoutService.onboardSeller(req.auth!.userId, input);
+
+  res.json({ data: result, meta: { requestId: req.id } });
+};
+
+export const getPayoutStatus: RequestHandler = async (req, res) => {
+  const result = await payoutService.getPayoutStatus(req.auth!.userId);
+
+  res.json({ data: result, meta: { requestId: req.id } });
 };
 
 export const listTransactions: RequestHandler = async (_req, res) => {

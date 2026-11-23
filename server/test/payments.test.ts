@@ -59,6 +59,43 @@ async function paidDealSetup() {
   return { seller, buyer, listing, deal };
 }
 
+describe("payout onboarding", () => {
+  it("onboards a seller and reports status without leaking the account id", async () => {
+    const seller = await registerUser(app);
+    const authSeller = auth(seller.accessToken);
+
+    const before = await authSeller(
+      request(app).get("/api/v1/payments/payout/status"),
+    ).expect(200);
+    expect(before.body.data.onboarded).toBe(false);
+
+    const response = await authSeller(
+      request(app)
+        .post("/api/v1/payments/payout/onboard")
+        .set("Origin", "http://localhost:3000")
+        .send({ country: "us" }),
+    ).expect(200);
+    expect(response.body.data.onboarded).toBe(true);
+
+    const after = await authSeller(
+      request(app).get("/api/v1/payments/payout/status"),
+    ).expect(200);
+    expect(after.body.data.onboarded).toBe(true);
+    expect(JSON.stringify(after.body)).not.toContain("test_acct");
+  });
+
+  it("validates the country code", async () => {
+    const seller = await registerUser(app);
+
+    await auth(seller.accessToken)(
+      request(app)
+        .post("/api/v1/payments/payout/onboard")
+        .set("Origin", "http://localhost:3000")
+        .send({ country: "USA" }),
+    ).expect(422);
+  });
+});
+
 describe("POST /api/v1/payments/checkout", () => {
   it("creates a pending transaction and a checkout URL", async () => {
     const { buyer, deal } = await paidDealSetup();

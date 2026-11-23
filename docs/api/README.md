@@ -774,6 +774,20 @@ replayed event changes nothing. A genuine `payment.succeeded` marks the
 transaction `SUCCEEDED` and moves the deal to `PAYMENT_PENDING` with a history
 entry, atomically. Invalid signatures return `401 INVALID_SIGNATURE`.
 
+### `POST /api/v1/payments/payout/onboard`
+
+Requires `Authorization` and a trusted `Origin`. Body: `{ "country": "US" }`
+(two-letter code). Creates the gateway connected account (idempotent) and
+returns `{ "data": { "onboarded": true, "accountId": "..." } }`. The account id
+is gateway-private and never appears in public user data.
+
+### `GET /api/v1/payments/payout/status`
+
+`200` with `{ "data": { "onboarded": boolean, "onboardedAt": string|null } }`.
+
+A seller who is not onboarded cannot accept a paid deal (`403
+PAYOUT_NOT_ONBOARDED`).
+
 ### Listing images
 
 Images are uploaded directly to S3-compatible storage using presigned URLs. The

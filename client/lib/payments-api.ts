@@ -48,6 +48,27 @@ export async function fetchTransaction(dealId: string): Promise<Transaction | nu
   }
 }
 
+export interface PayoutStatus {
+  onboarded: boolean;
+  onboardedAt: string | null;
+}
+
+/** Fetches the signed-in seller's payout onboarding status. */
+export async function fetchPayoutStatus(): Promise<PayoutStatus> {
+  const response = await apiRequest<{ data: PayoutStatus }>(
+    "/api/v1/payments/payout/status",
+  );
+
+  return response.data;
+}
+
+/** Completes payout onboarding with a two-letter country code. */
+export async function onboardPayout(country: string): Promise<PayoutStatus> {
+  await apiRequestJson("/api/v1/payments/payout/onboard", "POST", { country });
+
+  return fetchPayoutStatus();
+}
+
 export function formatMoney(cents: number, currency = "USD"): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",

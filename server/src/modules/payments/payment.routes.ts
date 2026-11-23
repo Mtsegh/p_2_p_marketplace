@@ -43,3 +43,17 @@ paymentRouter.get(
 );
 
 paymentRouter.post("/webhook", webhookLimit, controller.webhook);
+
+paymentRouter.post(
+  "/payout/onboard",
+  requireTrustedOrigin,
+  requireAuth,
+  createLimit,
+  controller.onboardPayout,
+);
+
+paymentRouter.get(
+  "/payout/status",
+  requireAuth,
+  controller.getPayoutStatus,
+);

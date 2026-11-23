@@ -188,6 +188,26 @@ export async function acceptDeal(dealId: string, userId: string) {
     throw new AppError("FORBIDDEN", 403, "Only the seller can accept this deal");
   }
 
+  // A sale deal moves money to the seller, so they must be onboarded for
+  // payouts first. Exchange deals without a cash top-up need no payout account.
+  const needsPayout =
+    deal.type === "SALE" || (deal.amountCents !== null && deal.amountCents > 0);
+
+  if (needsPayout) {
+    const seller = await prisma.user.findUnique({
+      where: { id: deal.sellerId },
+      select: { payoutOnboardedAt: true },
+    });
+
+    if (!seller?.payoutOnboardedAt) {
+      throw new AppError(
+        "PAYOUT_NOT_ONBOARDED",
+        403,
+        "Complete payout onboarding before accepting a paid deal",
+      );
+    }
+  }
+
   assertTransition(deal.status, "ACCEPTED");
 
   const updated = await repository.acceptDeal({ dealId, actorId: userId });

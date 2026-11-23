@@ -49,6 +49,10 @@ model User {
   /// E.164 format. Unique so one phone number cannot verify several accounts.
   phoneE164       String?    @unique @map("phone_e164")
   phoneVerifiedAt DateTime?  @map("phone_verified_at") @db.Timestamptz(3)
+  /// Set when the seller has completed gateway payout onboarding.
+  payoutOnboardedAt DateTime? @map("payout_onboarded_at") @db.Timestamptz(3)
+  /// Gateway's connected-account id, never returned to clients.
+  payoutAccountId   String?   @map("payout_account_id") @db.VarChar(200)
   createdAt       DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 

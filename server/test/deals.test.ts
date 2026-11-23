@@ -20,6 +20,15 @@ async function setup() {
     data: { emailVerifiedAt: new Date() },
   });
 
+  // Sellers need payout onboarding to accept paid deals (chunk 17 rule).
+  await prisma.user.update({
+    where: { id: seller.id },
+    data: {
+      payoutOnboardedAt: new Date(),
+      payoutAccountId: `test_acct_${seller.id}`,
+    },
+  });
+
   const listing = await prisma.listing.create({
     data: {
       ownerId: seller.id,
@@ -151,6 +160,23 @@ describe("POST /api/v1/deals", () => {
 });
 
 describe("POST /api/v1/deals/:dealId/accept", () => {
+  it("blocks a seller without payout onboarding from accepting a paid deal", async () => {
+    const { seller, buyer, listing } = await setup();
+
+    await prisma.user.update({
+      where: { id: seller.id },
+      data: { payoutOnboardedAt: null, payoutAccountId: null },
+    });
+
+    const deal = await propose(buyer.accessToken, listing.id).expect(201);
+
+    await auth(seller.accessToken)(
+      request(app)
+        .post(`/api/v1/deals/${deal.body.data.deal.id}/accept`)
+        .set("Origin", "http://localhost:3000"),
+    ).expect(403);
+  });
+
   it("accepts a proposal, reserves the listing, and rejects competing proposals", async () => {
     const { seller, buyer, listing } = await setup();
     const otherBuyer = await registerUser(app);

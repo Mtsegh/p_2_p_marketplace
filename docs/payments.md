@@ -36,6 +36,16 @@ replayed event is detected by the unique index and has no further effect.
 On `payment.succeeded`, the transaction goes to `SUCCEEDED` and the deal moves
 to `PAYMENT_PENDING` with a history entry.
 
+## Seller payout onboarding
+
+Before a seller can accept a **paid** deal, they must complete payout
+onboarding. `POST /api/v1/payments/payout/onboard` takes a two-letter country
+code and asks the gateway to create a connected account; the account id is
+stored privately on the user and never returned to clients. The attempt is
+idempotent. `GET /api/v1/payments/payout/status` reports only `onboarded` and
+`onboardedAt`. The deal service rejects accepting a sale deal (or an exchange
+with a cash top-up) with `403 PAYOUT_NOT_ONBOARDED` until onboarding is done.
+
 ## Fees, escrow, and payouts
 
 The platform fee is currently zero (`PLATFORM_FEE_BPS = 0`). Fee policy, escrow

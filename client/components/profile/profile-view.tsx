@@ -14,6 +14,7 @@ import { ChangeEmailForm } from "./change-email-form";
 import { ChangePasswordForm } from "./change-password-form";
 import { ProfileForm } from "./profile-form";
 import { PhoneVerificationForm } from "./phone-verification-form";
+import { PayoutSettings } from "./payout-settings";
 import { VerifyEmailBanner } from "./verify-email-banner";
 
 function Section({
@@ -214,6 +215,16 @@ export function ProfileView() {
             </p>
             <div className="mt-4">
               <PhoneVerificationForm />
+            </div>
+          </div>
+
+          <div className="border-t border-line pt-6">
+            <h3 className="font-medium">Payouts</h3>
+            <p className="mt-1 text-sm text-muted">
+              Set up a payout account before you can accept paid deals.
+            </p>
+            <div className="mt-4">
+              <PayoutSettings />
             </div>
           </div>
         </div>

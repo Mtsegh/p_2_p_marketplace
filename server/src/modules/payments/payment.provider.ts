@@ -29,6 +29,12 @@ export interface PaymentProvider {
   capture(providerPaymentId: string): Promise<void>;
   refund(providerPaymentId: string, amountCents?: number): Promise<void>;
   payout(destination: string, amountCents: number): Promise<string>;
+  /** Creates a connected account for a seller so they can receive payouts. */
+  createPayoutAccount(input: {
+    userId: string;
+    email: string;
+    country: string;
+  }): Promise<{ accountId: string }>;
 }
 
 /**
@@ -52,5 +58,9 @@ export const testPaymentProvider: PaymentProvider = {
   async refund() {},
   async payout() {
     return "test_payout";
+  },
+
+  async createPayoutAccount({ userId }) {
+    return { accountId: `test_acct_${userId}` };
   },
 };
