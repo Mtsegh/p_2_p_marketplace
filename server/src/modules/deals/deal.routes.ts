@@ -39,6 +39,15 @@ dealRouter.post(
   controller.createProposal,
 );
 
+dealRouter.post(
+  "/exchange",
+  requireTrustedOrigin,
+  requireAuth,
+  requireVerifiedEmail,
+  createLimit,
+  controller.createExchangeProposal,
+);
+
 dealRouter.get(
   "/",
   requireAuth,

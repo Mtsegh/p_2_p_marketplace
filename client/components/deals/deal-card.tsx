@@ -85,6 +85,11 @@ export function DealCard({
               ? `Seller: ${deal.sellerDisplayName}`
               : `Buyer: ${deal.buyerDisplayName}`}
           </p>
+          {deal.type === "EXCHANGE" && deal.offeredListings.length > 0 ? (
+            <p className="mt-1 text-xs text-muted">
+              Offers: {deal.offeredListings.map((item) => item.listingTitle).join(", ")}
+            </p>
+          ) : null}
         </div>
         <div className="flex flex-col items-end gap-2">
           <span className="font-semibold">{formatDealAmount(deal.amountCents)}</span>

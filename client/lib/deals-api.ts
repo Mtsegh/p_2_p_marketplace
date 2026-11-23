@@ -20,10 +20,16 @@ export interface DealHistoryItem {
   createdAt: string;
 }
 
+export interface OfferedListing {
+  listingId: string;
+  listingTitle: string;
+}
+
 export interface Deal {
   id: string;
   listingId: string;
   listingTitle: string;
+  offeredListings: OfferedListing[];
   buyerId: string;
   buyerDisplayName: string;
   sellerId: string;
@@ -48,6 +54,21 @@ export async function createProposal(input: {
 }): Promise<Deal> {
   const response = await apiRequestJson<{ data: { deal: Deal } }>(
     "/api/v1/deals",
+    "POST",
+    input,
+  );
+
+  return response.data.deal;
+}
+
+/** Creates an exchange proposal with the buyer's offered listings. */
+export async function createExchangeProposal(input: {
+  listingId: string;
+  offeredListingIds: string[];
+  topUpCents?: number;
+}): Promise<Deal> {
+  const response = await apiRequestJson<{ data: { deal: Deal } }>(
+    "/api/v1/deals/exchange",
     "POST",
     input,
   );

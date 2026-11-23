@@ -169,6 +169,15 @@ export async function publishListing(
   return response.data.listing;
 }
 
+/** Fetches the signed-in user's own listings (including drafts). */
+export async function fetchMyListings(): Promise<ListListingsResult> {
+  const response = await apiRequest<{ data: ListListingsResult }>(
+    "/api/v1/listings/mine",
+  );
+
+  return response.data;
+}
+
 /** Fetches all categories with their active listing counts. */
 export async function fetchCategories(): Promise<Category[]> {
   const response = await apiRequest<{ data: { categories: Category[] } }>(

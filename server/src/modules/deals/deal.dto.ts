@@ -9,10 +9,16 @@ export interface DealHistoryDto {
   createdAt: string;
 }
 
+export interface OfferedListingDto {
+  listingId: string;
+  listingTitle: string;
+}
+
 export interface DealDto {
   id: string;
   listingId: string;
   listingTitle: string;
+  offeredListings: OfferedListingDto[];
   buyerId: string;
   buyerDisplayName: string;
   sellerId: string;
@@ -30,6 +36,10 @@ type DealWithRelations = Deal & {
   buyer: { profile: { displayName: string } | null };
   seller: { profile: { displayName: string } | null };
   history: DealHistory[];
+  offeredListings: Array<{
+    listingId: string;
+    listing: { title: string };
+  }>;
 };
 
 export function toDealDto(deal: DealWithRelations): DealDto {
@@ -37,6 +47,10 @@ export function toDealDto(deal: DealWithRelations): DealDto {
     id: deal.id,
     listingId: deal.listingId,
     listingTitle: deal.listing.title,
+    offeredListings: deal.offeredListings.map((item) => ({
+      listingId: item.listingId,
+      listingTitle: item.listing.title,
+    })),
     buyerId: deal.buyerId,
     buyerDisplayName: deal.buyer.profile?.displayName ?? "Marketplace member",
     sellerId: deal.sellerId,

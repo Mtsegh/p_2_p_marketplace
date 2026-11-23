@@ -669,6 +669,16 @@ Body: `{ "listingId": "<uuid>", "amountCents": <int > 0> }`. `201` with
 an exchange-only listing, or a duplicate pending proposal; `409` when the
 listing is not active; `403` when the email is unverified.
 
+### `POST /api/v1/deals/exchange`
+
+Creates an exchange proposal. Body:
+`{ "listingId": "<uuid>", "offeredListingIds": ["<uuid>", ...], "topUpCents"?: <int> }`.
+Every offered listing must be one of the buyer's own ACTIVE listings; the target
+listing must accept exchanges. `201` with the deal, whose `offeredListings`
+array lists the offered items. Accepting the deal reserves **all** listings
+involved (target + offered) and rejects competing proposals touching any of
+them. `422` for invalid offered listings or an empty list.
+
 ### `GET /api/v1/deals`
 
 Query: `role` (`buyer`, `seller`, `all`), `status`, `limit`, `cursor`. `200` with

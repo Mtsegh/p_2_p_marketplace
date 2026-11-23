@@ -4,16 +4,17 @@ import { AppError } from "../../lib/app-error.js";
 import * as repository from "./deal.repository.js";
 import { actorFor, assertTransition } from "./deal-state-machine.js";
 import type {
+  CreateExchangeProposalInput,
   CreateProposalInput,
   ListDealsQuery,
 } from "./deal.schemas.js";
 
-/**
- * Creates a sale proposal. Rules: the listing must exist and be ACTIVE, the
- * buyer cannot propose on their own listing, and the buyer must have a verified
- * email (the route enforces that too, but the service is the source of truth).
- */
-export async function createProposal(buyerId: string, input: CreateProposalInput) {
+/** Shared guards for any proposal: verified email, active listing, not own listing. */
+async function validateProposer(
+  buyerId: string,
+  listingId: string,
+  acceptSale: boolean,
+) {
   const buyer = await prisma.user.findUnique({
     where: { id: buyerId },
     select: { emailVerifiedAt: true },
@@ -28,7 +29,7 @@ export async function createProposal(buyerId: string, input: CreateProposalInput
   }
 
   const listing = await prisma.listing.findUnique({
-    where: { id: input.listingId },
+    where: { id: listingId },
     select: { id: true, ownerId: true, status: true, listingType: true },
   });
 
@@ -52,13 +53,47 @@ export async function createProposal(buyerId: string, input: CreateProposalInput
     );
   }
 
-  if (listing.listingType === "EXCHANGE") {
+  if (!acceptSale && listing.listingType === "SALE") {
+    throw new AppError(
+      "SALE_ONLY",
+      422,
+      "This listing only accepts sale offers",
+    );
+  }
+
+  if (acceptSale && listing.listingType === "EXCHANGE") {
     throw new AppError(
       "EXCHANGE_ONLY",
       422,
       "This listing only accepts exchange offers",
     );
   }
+
+  return listing;
+}
+
+function translateDuplicate(error: unknown): never {
+  if (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === "P2002"
+  ) {
+    throw new AppError(
+      "PROPOSAL_EXISTS",
+      409,
+      "You already have a pending proposal on this listing",
+    );
+  }
+
+  throw error;
+}
+
+/**
+ * Creates a sale proposal. Rules: the listing must exist and be ACTIVE, the
+ * buyer cannot propose on their own listing, and the buyer must have a verified
+ * email (the route enforces that too, but the service is the source of truth).
+ */
+export async function createProposal(buyerId: string, input: CreateProposalInput) {
+  const listing = await validateProposer(buyerId, input.listingId, true);
 
   try {
     return await repository.createProposal({
@@ -68,19 +103,72 @@ export async function createProposal(buyerId: string, input: CreateProposalInput
       amountCents: input.amountCents,
     });
   } catch (error) {
-    // The partial unique index rejects a second PROPOSED deal by the same buyer.
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === "P2002"
-    ) {
-      throw new AppError(
-        "PROPOSAL_EXISTS",
-        409,
-        "You already have a pending proposal on this listing",
-      );
+    translateDuplicate(error);
+  }
+}
+
+/**
+ * Creates an exchange proposal. Every offered listing must belong to the buyer
+ * and be ACTIVE; the optional cash top-up is stored as the deal amount.
+ */
+export async function createExchangeProposal(
+  buyerId: string,
+  input: CreateExchangeProposalInput,
+) {
+  const listing = await validateProposer(buyerId, input.listingId, false);
+
+  const offered = await prisma.listing.findMany({
+    where: {
+      id: { in: input.offeredListingIds },
+      ownerId: buyerId,
+      status: "ACTIVE",
+    },
+    select: { id: true },
+  });
+
+  if (offered.length !== input.offeredListingIds.length) {
+    throw new AppError(
+      "INVALID_OFFERED_LISTINGS",
+      422,
+      "Every offered listing must be one of your active listings",
+    );
+  }
+
+  // An active deal must not already involve any offered listing.
+  const busy = await prisma.deal.findFirst({
+    where: {
+      status: "ACCEPTED",
+      OR: [
+        { listingId: { in: input.offeredListingIds } },
+        { offeredListings: { some: { listingId: { in: input.offeredListingIds } } } },
+      ],
+    },
+  });
+
+  if (busy) {
+    throw new AppError(
+      "LISTING_NOT_AVAILABLE",
+      409,
+      "One of your offered listings is already part of a deal",
+    );
+  }
+
+  try {
+    const created = await repository.createExchangeProposal({
+      listingId: listing.id,
+      buyerId,
+      sellerId: listing.ownerId,
+      topUpCents: input.topUpCents ?? null,
+      offeredListingIds: input.offeredListingIds,
+    });
+
+    if (!created) {
+      throw AppError.notFound("Deal not found after creation");
     }
 
-    throw error;
+    return created;
+  } catch (error) {
+    translateDuplicate(error);
   }
 }
 

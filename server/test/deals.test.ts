@@ -239,3 +239,146 @@ describe("GET /api/v1/deals", () => {
     expect(otherList.body.data.deals).toHaveLength(0);
   });
 });
+
+describe("exchange proposals", () => {
+  async function swapSetup() {
+    const base = await setup();
+
+    // Make the target listing exchange-capable.
+    await prisma.listing.update({
+      where: { id: base.listing.id },
+      data: { listingType: "BOTH", priceCents: null },
+    });
+
+    // Two active listings owned by the buyer, offered in return.
+    const offered = await prisma.listing.createManyAndReturn({
+      data: [
+        {
+          ownerId: base.buyer.id,
+          title: "Buyer item 1",
+          description: "Offered in swap",
+          location: "Lagos",
+          status: "ACTIVE",
+          listingType: "EXCHANGE",
+        },
+        {
+          ownerId: base.buyer.id,
+          title: "Buyer item 2",
+          description: "Offered in swap",
+          location: "Lagos",
+          status: "ACTIVE",
+          listingType: "EXCHANGE",
+        },
+      ],
+    });
+
+    return { ...base, offered };
+  }
+
+  function exchange(token: string, listingId: string, offeredListingIds: string[], topUpCents?: number) {
+    return auth(token)(
+      request(app)
+        .post("/api/v1/deals/exchange")
+        .set("Origin", "http://localhost:3000")
+        .send({ listingId, offeredListingIds, ...(topUpCents !== undefined ? { topUpCents } : {}) }),
+    );
+  }
+
+  it("creates an exchange proposal with offered listings and a top-up", async () => {
+    const { buyer, listing, offered } = await swapSetup();
+
+    const response = await exchange(
+      buyer.accessToken,
+      listing.id,
+      offered.map((item) => item.id),
+      1000,
+    ).expect(201);
+
+    expect(response.body.data.deal.type).toBe("EXCHANGE");
+    expect(response.body.data.deal.amountCents).toBe(1000);
+    expect(response.body.data.deal.offeredListings).toHaveLength(2);
+  });
+
+  it("rejects offered listings the buyer does not own", async () => {
+    const { buyer, listing, seller } = await swapSetup();
+
+    const foreign = await prisma.listing.create({
+      data: {
+        ownerId: seller.id,
+        title: "Seller item",
+        description: "Not the buyer's",
+        location: "Lagos",
+        status: "ACTIVE",
+      },
+    });
+
+    await exchange(buyer.accessToken, listing.id, [foreign.id]).expect(422);
+  });
+
+  it("rejects an exchange proposal with no offered listings", async () => {
+    const { buyer, listing } = await swapSetup();
+
+    await exchange(buyer.accessToken, listing.id, []).expect(422);
+  });
+
+  it("reserves all listings involved when an exchange is accepted", async () => {
+    const { seller, buyer, listing, offered } = await swapSetup();
+
+    const response = await exchange(
+      buyer.accessToken,
+      listing.id,
+      offered.map((item) => item.id),
+    ).expect(201);
+
+    await auth(seller.accessToken)(
+      request(app)
+        .post(`/api/v1/deals/${response.body.data.deal.id}/accept`)
+        .set("Origin", "http://localhost:3000"),
+    ).expect(200);
+
+    const statuses = await prisma.listing.findMany({
+      where: { id: { in: [listing.id, ...offered.map((item) => item.id)] } },
+      select: { id: true, status: true },
+    });
+
+    expect(statuses).toHaveLength(3);
+    expect(statuses.every((item) => item.status === "RESERVED")).toBe(true);
+  });
+
+  it("rejects a competing proposal touching an offered listing", async () => {
+    const { seller, buyer, listing, offered } = await swapSetup();
+    const anotherBuyer = await registerUser(app);
+    await prisma.user.update({
+      where: { id: anotherBuyer.id },
+      data: { emailVerifiedAt: new Date() },
+    });
+
+    // Another buyer makes a sale proposal on one of the listings our buyer
+    // wants to offer. Make it sale-capable first (offered items are EXCHANGE).
+    await prisma.listing.update({
+      where: { id: offered[0]!.id },
+      data: { listingType: "BOTH" },
+    });
+    const competing = await propose(
+      anotherBuyer.accessToken,
+      offered[0]!.id,
+    ).expect(201);
+
+    const deal = await exchange(
+      buyer.accessToken,
+      listing.id,
+      offered.map((item) => item.id),
+    ).expect(201);
+
+    await auth(seller.accessToken)(
+      request(app)
+        .post(`/api/v1/deals/${deal.body.data.deal.id}/accept`)
+        .set("Origin", "http://localhost:3000"),
+    ).expect(200);
+
+    const competitor = await prisma.deal.findUnique({
+      where: { id: competing.body.data.deal.id },
+    });
+    expect(competitor?.status).toBe("REJECTED");
+  });
+});

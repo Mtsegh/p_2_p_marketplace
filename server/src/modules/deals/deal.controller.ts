@@ -3,6 +3,7 @@ import { parseInput } from "../../lib/validate.js";
 import { toDealDto } from "./deal.dto.js";
 import * as service from "./deal.service.js";
 import {
+  createExchangeProposalSchema,
   createProposalSchema,
   dealParamsSchema,
   listDealsQuerySchema,
@@ -11,6 +12,16 @@ import {
 export const createProposal: RequestHandler = async (req, res) => {
   const input = parseInput(createProposalSchema, req.body);
   const deal = await service.createProposal(req.auth!.userId, input);
+
+  res.status(201).json({
+    data: { deal: toDealDto(deal) },
+    meta: { requestId: req.id },
+  });
+};
+
+export const createExchangeProposal: RequestHandler = async (req, res) => {
+  const input = parseInput(createExchangeProposalSchema, req.body);
+  const deal = await service.createExchangeProposal(req.auth!.userId, input);
 
   res.status(201).json({
     data: { deal: toDealDto(deal) },

@@ -35,6 +35,15 @@ export const listListings: RequestHandler = async (req, res) => {
   });
 };
 
+export const listMyListings: RequestHandler = async (req, res) => {
+  const limit = 100;
+  const result = await listingService.listListingsByOwner(req.auth!.userId, {
+    limit,
+  });
+
+  res.json({ data: result, meta: { requestId: req.id } });
+};
+
 export const getListing: RequestHandler = async (req, res) => {
   const { listingId } = parseInput(listingParamsSchema, req.params);
   const listing = await listingRepository.findListingById(listingId);

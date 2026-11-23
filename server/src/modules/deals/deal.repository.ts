@@ -8,6 +8,12 @@ const DEAL_INCLUDE = {
   buyer: { select: { profile: { select: { displayName: true } } } },
   seller: { select: { profile: { select: { displayName: true } } } },
   history: { orderBy: { createdAt: "asc" as const } },
+  offeredListings: {
+    select: {
+      listingId: true,
+      listing: { select: { title: true } },
+    },
+  },
 } as const;
 
 export function findDealById(dealId: string) {
@@ -50,10 +56,50 @@ export function createProposal(input: {
 }
 
 /**
- * Accepts a proposal atomically: locks the listing row, confirms it is still
- * ACTIVE, marks it RESERVED, rejects all competing PROPOSED deals (recording
- * each in history), then moves this deal to ACCEPTED. The unique partial index
- * on accepted deals is the final guard against double acceptance.
+ * Creates an exchange proposal together with the offered listings. All writes
+ * are in one transaction so a deal never exists without its offered listings.
+ */
+export function createExchangeProposal(input: {
+  listingId: string;
+  buyerId: string;
+  sellerId: string;
+  topUpCents: number | null;
+  offeredListingIds: string[];
+}) {
+  return prisma.$transaction(async (tx) => {
+    const deal = await tx.deal.create({
+      data: {
+        listingId: input.listingId,
+        buyerId: input.buyerId,
+        sellerId: input.sellerId,
+        type: "EXCHANGE",
+        amountCents: input.topUpCents,
+        status: "PROPOSED",
+        history: {
+          create: {
+            fromStatus: "PROPOSED",
+            toStatus: "PROPOSED",
+            note: "Exchange proposal created",
+          },
+        },
+        offeredListings: {
+          create: input.offeredListingIds.map((listingId) => ({ listingId })),
+        },
+      },
+    });
+
+    return tx.deal.findUnique({
+      where: { id: deal.id },
+      include: DEAL_INCLUDE,
+    });
+  });
+}
+
+/**
+ * Accepts a proposal atomically: locks every listing involved (the target plus
+ * any offered in a swap), confirms they are all still ACTIVE, marks them all
+ * RESERVED, rejects all competing PROPOSED deals on any of them (recording each
+ * in history), then moves this deal to ACCEPTED.
  */
 export function acceptDeal(input: {
   dealId: string;
@@ -62,32 +108,43 @@ export function acceptDeal(input: {
   return prisma.$transaction(async (tx) => {
     const deal = await tx.deal.findUnique({
       where: { id: input.dealId },
+      include: { offeredListings: { select: { listingId: true } } },
     });
 
     if (!deal || deal.status !== "PROPOSED") {
       return null;
     }
 
-    // Lock the listing row so no competing accept can interleave.
+    // All listings in this deal: the target plus the proposer's offered items.
+    const listingIds = [
+      deal.listingId,
+      ...deal.offeredListings.map((item) => item.listingId),
+    ];
+
+    // Lock every listing row in a stable order to avoid deadlocks between
+    // concurrent accepts touching overlapping listings.
     const locked = await tx.$queryRaw<Array<{ id: string; status: string }>>(
-      Prisma.sql`SELECT id, status::text FROM listings WHERE id = ${deal.listingId} FOR UPDATE`,
+      Prisma.sql`SELECT id, status::text FROM listings WHERE id IN (${Prisma.join(listingIds)}) ORDER BY id FOR UPDATE`,
     );
 
-    if (locked.length === 0 || locked[0]!.status !== "ACTIVE") {
+    if (locked.length !== listingIds.length || locked.some((row) => row.status !== "ACTIVE")) {
       return null;
     }
 
-    await tx.listing.update({
-      where: { id: deal.listingId },
+    await tx.listing.updateMany({
+      where: { id: { in: listingIds } },
       data: { status: "RESERVED" },
     });
 
-    // Reject competing proposals, recording a history event for each.
+    // Reject competing proposals on any involved listing, recording history.
     const competing = await tx.deal.findMany({
       where: {
-        listingId: deal.listingId,
         status: "PROPOSED",
         id: { not: deal.id },
+        OR: [
+          { listingId: { in: listingIds } },
+          { offeredListings: { some: { listingId: { in: listingIds } } } },
+        ],
       },
       select: { id: true },
     });
@@ -102,8 +159,8 @@ export function acceptDeal(input: {
         data: competing.map((item) => ({
           dealId: item.id,
           actorId: input.actorId,
-          fromStatus: "PROPOSED",
-          toStatus: "REJECTED",
+          fromStatus: "PROPOSED" as const,
+          toStatus: "REJECTED" as const,
           note: "Rejected when another proposal was accepted",
         })),
       });

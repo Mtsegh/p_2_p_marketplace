@@ -68,6 +68,13 @@ const modifyImageLimit = rateLimit({
 
 // Static paths MUST be registered before "/:listingId", otherwise Express
 // matches "categories" as a listing id and validation rejects it with 422.
+listingRouter.get(
+  "/mine",
+  requireAuth,
+  publicListingsLimit,
+  controller.listMyListings,
+);
+
 listingRouter.post(
   "/",
   requireTrustedOrigin,

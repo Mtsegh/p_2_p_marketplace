@@ -4,6 +4,7 @@ import { cache } from "react";
 import { Suspense } from "react";
 import { PageContainer } from "@/components/layout/page-container";
 import { ProposalForm } from "@/components/deals/proposal-form";
+import { ExchangeProposalForm } from "@/components/deals/exchange-proposal-form";
 import { ListingGallery } from "@/components/listings/listing-gallery";
 import { ListingCard } from "@/components/listings/listing-card";
 import { SellerCard } from "@/components/listings/seller-card";
@@ -147,12 +148,17 @@ export default async function ListingDetailPage({ params }: PageProps) {
             <p className="mt-1 text-sm text-muted">{listing.location}</p>
           </div>
 
-          <div>
+          <div className="flex flex-col gap-4">
             <ProposalForm
               listingId={listing.id}
               ownerId={listing.ownerId}
               listingType={listing.listingType}
               askCents={listing.priceCents}
+            />
+            <ExchangeProposalForm
+              listingId={listing.id}
+              ownerId={listing.ownerId}
+              listingType={listing.listingType}
             />
           </div>
 

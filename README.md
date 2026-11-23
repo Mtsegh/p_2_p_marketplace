@@ -255,6 +255,10 @@ page showing its full state-change history. Deals use an explicit state machine,
 and accepting a proposal locks the listing, reserves it, and rejects competing
 proposals atomically — two buyers cannot both get the same item.
 
+Exchange proposals let a buyer offer one or more of their own active listings
+(plus an optional cash top-up) for an item. Accepting a swap reserves every
+listing involved and rejects competing proposals on any of them.
+
 
 ### Continuous integration
 

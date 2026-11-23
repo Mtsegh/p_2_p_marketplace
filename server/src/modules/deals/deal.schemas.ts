@@ -14,6 +14,26 @@ export const createProposalSchema = z
   })
   .strict();
 
+/**
+ * An exchange proposal: target listing, one or more of the proposer's own
+ * listings to offer in return, and an optional cash top-up.
+ */
+export const createExchangeProposalSchema = z
+  .object({
+    listingId: id,
+    offeredListingIds: z
+      .array(id)
+      .min(1, "Offer at least one of your listings")
+      .max(10, "You can offer at most 10 listings"),
+    topUpCents: z
+      .number()
+      .int()
+      .min(0, "Top-up must be zero or more")
+      .max(10_000_000_00, "Top-up is too high")
+      .optional(),
+  })
+  .strict();
+
 export const dealParamsSchema = z.object({ dealId: id }).strict();
 
 export const listDealsQuerySchema = z
@@ -37,4 +57,7 @@ export const listDealsQuerySchema = z
   .strict();
 
 export type CreateProposalInput = z.infer<typeof createProposalSchema>;
+export type CreateExchangeProposalInput = z.infer<
+  typeof createExchangeProposalSchema
+>;
 export type ListDealsQuery = z.infer<typeof listDealsQuerySchema>;

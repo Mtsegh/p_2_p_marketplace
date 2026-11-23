@@ -106,12 +106,30 @@ model Deal {
   buyer   User    @relation("BuyerDeals", fields: [buyerId], references: [id], onDelete: Cascade)
   seller  User    @relation("SellerDeals", fields: [sellerId], references: [id], onDelete: Cascade)
   history DealHistory[]
+  /// Listings the proposer offers in an exchange deal (their own items).
+  offeredListings DealOfferedListing[]
 
   @@index([listingId])
   @@index([buyerId])
   @@index([sellerId])
   @@index([status])
   @@map("deals")
+}
+
+/// A listing the buyer offers as part of an exchange proposal. The listing
+/// being proposed on is stored on Deal.listingId; these are the proposer's own
+/// items offered in return. All of them are reserved when the deal is accepted.
+model DealOfferedListing {
+  id        String @id @default(uuid()) @db.Uuid
+  dealId    String @map("deal_id") @db.Uuid
+  listingId String @map("listing_id") @db.Uuid
+
+  deal    Deal    @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@unique([dealId, listingId])
+  @@index([listingId])
+  @@map("deal_offered_listings")
 }
 
 /// Append-only audit of every deal state transition, with actor and timestamp.
@@ -253,6 +271,7 @@ model Listing {
 
   images      ListingImage[]
   deals       Deal[]
+  offeredInDeals DealOfferedListing[]
   owner    User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
