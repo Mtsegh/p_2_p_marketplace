@@ -270,8 +270,12 @@ The gateway's signed webhook is the source of truth: verifying the HMAC over the
 raw body and recording each event ID makes handlers idempotent, so a replayed
 webhook changes nothing. A genuine success marks the transaction `SUCCEEDED` and
 moves the deal to `PAYMENT_PENDING`. All money is integer cents with an explicit
-currency. See `docs/payments.md` (added with escrow in a later chunk) for the
-fee and payout policy.
+currency.
+
+Once funds are secured, the buyer reveals a one-time 6-digit handoff code after
+inspecting the item; the seller enters it to complete the deal and release the
+payout. The code is stored only as a hash, expires, and locks after too many
+wrong attempts. See `docs/payments.md` for the fee, escrow, and payout policy.
 
 
 ### Continuous integration

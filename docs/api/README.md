@@ -774,6 +774,30 @@ replayed event changes nothing. A genuine `payment.succeeded` marks the
 transaction `SUCCEEDED` and moves the deal to `PAYMENT_PENDING` with a history
 entry, atomically. Invalid signatures return `401 INVALID_SIGNATURE`.
 
+### Handoff code
+
+Handoff is the step where the buyer inspects the item and the seller confirms
+receipt to release funds. Only available while the deal is `PAYMENT_PENDING`.
+The code is a 6-digit value; only its SHA-256 hash is stored, it expires after
+`HANDOFF_CODE_TTL_MINUTES`, and wrong attempts are limited to
+`HANDOFF_MAX_ATTEMPTS` before a new code is required.
+
+#### `POST /api/v1/deals/:dealId/handoff/reveal`
+
+Buyer only. `200` with `{ "data": { "code": "482 915", "expiresAt": "..." } }`.
+The plaintext is returned to the buyer only and never stored.
+
+#### `POST /api/v1/deals/:dealId/handoff/complete`
+
+Seller only. Body: `{ "code": "482 915" }`. On the correct code, the deal
+becomes `COMPLETED`, a `PAYOUT` ledger entry records the seller's release, and
+funds are sent to the seller's connected account — atomically. Wrong codes
+return `400 INVALID_HANDOFF_CODE` and count toward the attempt limit;
+`410 HANDOFF_CODE_EXPIRED` and `429 HANDOFF_ATTEMPTS_EXCEEDED` are also possible.
+
+A completed deal has `status: COMPLETED`, a `completedAt` timestamp, and no
+stored handoff code.
+
 ### `POST /api/v1/payments/payout/onboard`
 
 Requires `Authorization` and a trusted `Origin`. Body: `{ "country": "US" }`

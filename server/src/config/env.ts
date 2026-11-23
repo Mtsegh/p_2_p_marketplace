@@ -83,6 +83,10 @@ const envSchema = z
     PLATFORM_FEE_BPS: z.coerce.number().int().min(0).max(5000).default(0),
     /** Secret for the internal escrow-expiry processor endpoint. */
     CRON_SECRET: z.string().min(16).default("test-only-cron-secret-change-me"),
+    /** Minutes a handoff code stays valid. */
+    HANDOFF_CODE_TTL_MINUTES: z.coerce.number().int().min(5).max(1440).default(60),
+    /** Maximum wrong-code attempts before the code is voided. */
+    HANDOFF_MAX_ATTEMPTS: z.coerce.number().int().min(3).max(20).default(5),
     EMAIL_FROM_ADDRESS: z
       .string()
       .trim()

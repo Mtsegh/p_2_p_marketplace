@@ -107,6 +107,11 @@ model Deal {
   status     DealStatus @default(PROPOSED) @map("status")
   /// When secured funds are automatically refunded if handoff never happens.
   escrowExpiresAt DateTime? @map("escrow_expires_at") @db.Timestamptz(3)
+  /// SHA-256 hash of the one-time handoff code shown to the buyer.
+  handoffCodeHash String?  @map("handoff_code_hash") @db.VarChar(64)
+  handoffCodeExpiresAt DateTime? @map("handoff_code_expires_at") @db.Timestamptz(3)
+  handoffAttempts Int      @default(0) @map("handoff_attempts")
+  completedAt DateTime?    @map("completed_at") @db.Timestamptz(3)
   createdAt  DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt  DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 

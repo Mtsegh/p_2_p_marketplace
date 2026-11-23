@@ -4,6 +4,7 @@ import { requireTrustedOrigin } from "../../middleware/trusted-origin.js";
 import { requireAuth, requireVerifiedEmail } from "../auth/auth.middleware.js";
 import * as controller from "./deal.controller.js";
 import * as messageController from "./message.controller.js";
+import * as handoffController from "./handoff.controller.js";
 
 export const dealRouter = Router();
 
@@ -101,4 +102,21 @@ dealRouter.post(
   requireAuth,
   modifyLimit,
   messageController.postMessage,
+);
+
+// One-time handoff code: buyer reveals, seller submits to complete the deal.
+dealRouter.post(
+  "/:dealId/handoff/reveal",
+  requireTrustedOrigin,
+  requireAuth,
+  modifyLimit,
+  handoffController.revealHandoffCode,
+);
+
+dealRouter.post(
+  "/:dealId/handoff/complete",
+  requireTrustedOrigin,
+  requireAuth,
+  modifyLimit,
+  handoffController.completeHandoff,
 );

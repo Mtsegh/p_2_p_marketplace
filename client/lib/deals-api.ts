@@ -90,6 +90,31 @@ export async function createExchangeProposal(input: {
   return response.data.deal;
 }
 
+/** Buyer reveals the one-time handoff code (only while funds are secured). */
+export async function revealHandoffCode(
+  dealId: string,
+): Promise<{ code: string; expiresAt: string }> {
+  const response = await apiRequestJson<{
+    data: { code: string; expiresAt: string };
+  }>(`/api/v1/deals/${encodeURIComponent(dealId)}/handoff/reveal`, "POST");
+
+  return response.data;
+}
+
+/** Seller submits the handoff code to complete the deal and release funds. */
+export async function completeHandoff(
+  dealId: string,
+  code: string,
+): Promise<{ id: string; status: DealStatus }> {
+  const response = await apiRequestJson<{
+    data: { id: string; status: DealStatus };
+  }>(`/api/v1/deals/${encodeURIComponent(dealId)}/handoff/complete`, "POST", {
+    code,
+  });
+
+  return response.data;
+}
+
 /** Fetches a single deal with its full history. */
 export async function fetchDeal(dealId: string): Promise<Deal> {
   const response = await apiRequest<{ data: { deal: Deal } }>(
