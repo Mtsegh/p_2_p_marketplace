@@ -1,10 +1,14 @@
 import { prisma } from "../../db/prisma.js";
+import { env } from "../../config/env.js";
 import { AppError } from "../../lib/app-error.js";
 import { testPaymentProvider } from "./payment.provider.js";
 import * as repository from "./payment.repository.js";
 import type { WebhookPayload } from "./payment.schemas.js";
 
-const PLATFORM_FEE_BPS = 0; // Fee policy is decided in a later chunk; 0 for now.
+/** Net amount the seller would receive after the platform fee. */
+function dealsNetAmount(amountCents: number, feeCents: number): number {
+  return Math.max(0, amountCents - feeCents);
+}
 
 /**
  * Starts hosted checkout for an accepted sale deal. Only the buyer may pay.
@@ -66,7 +70,7 @@ export async function createCheckout(userId: string, dealId: string) {
     provider: testPaymentProvider.name,
     providerPaymentId: intent.providerPaymentId,
     amountCents: intent.amountCents,
-    feeCents: Math.round((intent.amountCents * PLATFORM_FEE_BPS) / 10000),
+    feeCents: Math.round((intent.amountCents * env.PLATFORM_FEE_BPS) / 10000),
     currency: intent.currency,
   });
 
@@ -113,16 +117,33 @@ export async function handleWebhook(payload: WebhookPayload) {
       });
 
       if (deal && deal.status === "ACCEPTED") {
+        const escrowExpiresAt = new Date(
+          Date.now() + env.ESCROW_WINDOW_DAYS * 86_400_000,
+        );
+
         await tx.deal.update({
           where: { id: deal.id },
-          data: { status: "PAYMENT_PENDING" },
+          data: { status: "PAYMENT_PENDING", escrowExpiresAt },
         });
         await tx.dealHistory.create({
           data: {
             dealId: deal.id,
             fromStatus: "ACCEPTED",
             toStatus: "PAYMENT_PENDING",
-            note: "Payment succeeded",
+            note: `Payment secured; funds held until ${escrowExpiresAt.toISOString()}`,
+          },
+        });
+        // Ledger: the platform now holds the funds (net of its fee).
+        await tx.ledgerEntry.create({
+          data: {
+            transactionId: applied.transaction.id,
+            type: "HOLD",
+            amountCents: dealsNetAmount(
+              applied.transaction.amountCents,
+              applied.transaction.feeCents,
+            ),
+            currency: applied.transaction.currency,
+            reference: `escrow:${deal.id}`,
           },
         });
       }

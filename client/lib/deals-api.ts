@@ -50,6 +50,7 @@ export interface Deal {
   type: DealType;
   amountCents: number | null;
   status: DealStatus;
+  escrowExpiresAt: string | null;
   createdAt: string;
   updatedAt: string;
   history: DealHistoryItem[];

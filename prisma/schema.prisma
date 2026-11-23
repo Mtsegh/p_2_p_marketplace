@@ -105,6 +105,8 @@ model Deal {
   type       DealType   @default(SALE) @map("type")
   amountCents Int?      @map("amount_cents") // Offer price; null for exchange-only
   status     DealStatus @default(PROPOSED) @map("status")
+  /// When secured funds are automatically refunded if handoff never happens.
+  escrowExpiresAt DateTime? @map("escrow_expires_at") @db.Timestamptz(3)
   createdAt  DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt  DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
@@ -197,10 +199,34 @@ model Transaction {
   updatedAt       DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  ledgerEntries LedgerEntry[]
 
   @@index([dealId])
   @@index([status])
   @@map("transactions")
+}
+
+/// Ledger of money movements (holds, refunds, payouts). Append-only; each
+/// entry references a transaction and records the direction and amount.
+enum LedgerEntryType {
+  HOLD
+  REFUND
+  PAYOUT
+}
+
+model LedgerEntry {
+  id            String         @id @default(uuid()) @db.Uuid
+  transactionId String         @map("transaction_id") @db.Uuid
+  type          LedgerEntryType @map("type")
+  amountCents   Int            @map("amount_cents")
+  currency      String         @default("USD") @map("currency") @db.VarChar(3)
+  reference     String?        @map("reference") @db.VarChar(200)
+  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  @@index([transactionId])
+  @@map("ledger_entries")
 }
 
 /// A processed gateway webhook event. The unique provider_event_id makes

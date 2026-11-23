@@ -45,6 +45,12 @@ paymentRouter.get(
 paymentRouter.post("/webhook", webhookLimit, controller.webhook);
 
 paymentRouter.post(
+  "/escrow/process-expired",
+  webhookLimit,
+  controller.processEscrowExpiry,
+);
+
+paymentRouter.post(
   "/payout/onboard",
   requireTrustedOrigin,
   requireAuth,

@@ -77,6 +77,12 @@ const envSchema = z
     S3_PRESIGN_TTL_SECONDS: z.coerce.number().int().min(60).max(86_400).default(900),
     /** Shared secret for verifying gateway webhook signatures. */
     WEBHOOK_SECRET: z.string().min(16).default("test-only-webhook-secret-change-me"),
+    /** Days a secured payment is held before automatic refund. */
+    ESCROW_WINDOW_DAYS: z.coerce.number().int().min(1).max(90).default(7),
+    /** Platform fee in basis points (100 = 1%). Test mode defaults to zero. */
+    PLATFORM_FEE_BPS: z.coerce.number().int().min(0).max(5000).default(0),
+    /** Secret for the internal escrow-expiry processor endpoint. */
+    CRON_SECRET: z.string().min(16).default("test-only-cron-secret-change-me"),
     EMAIL_FROM_ADDRESS: z
       .string()
       .trim()

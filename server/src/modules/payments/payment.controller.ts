@@ -1,9 +1,11 @@
 import type { Request, RequestHandler } from "express";
+import { env } from "../../config/env.js";
 import { AppError } from "../../lib/app-error.js";
 import { parseInput } from "../../lib/validate.js";
 import { toTransactionDto } from "./payment.dto.js";
 import * as service from "./payment.service.js";
 import * as payoutService from "./payout.service.js";
+import * as escrowService from "./escrow.service.js";
 import {
   createCheckoutSchema,
   transactionQuerySchema,
@@ -52,6 +54,17 @@ export const getPayoutStatus: RequestHandler = async (req, res) => {
   const result = await payoutService.getPayoutStatus(req.auth!.userId);
 
   res.json({ data: result, meta: { requestId: req.id } });
+};
+
+/** Internal endpoint for the escrow-expiry scheduler (secret in a header). */
+export const processEscrowExpiry: RequestHandler = async (req, res) => {
+  if (req.get("x-cron-secret") !== env.CRON_SECRET) {
+    throw new AppError("UNAUTHENTICATED", 401, "Invalid cron secret");
+  }
+
+  const result = await escrowService.processExpiredEscrows();
+
+  res.json({ data: result });
 };
 
 export const listTransactions: RequestHandler = async (_req, res) => {

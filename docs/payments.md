@@ -46,9 +46,23 @@ idempotent. `GET /api/v1/payments/payout/status` reports only `onboarded` and
 `onboardedAt`. The deal service rejects accepting a sale deal (or an exchange
 with a cash top-up) with `403 PAYOUT_NOT_ONBOARDED` until onboarding is done.
 
-## Fees, escrow, and payouts
+## Escrow hold
 
-The platform fee is currently zero (`PLATFORM_FEE_BPS = 0`). Fee policy, escrow
-hold windows, refund rules, and seller payouts are defined in later chunks
-(escrow hold, handoff release, disputes). This document is updated as those
-land; no fee or payout rule should be inferred from the current zero value.
+When a payment succeeds, the funds are held in escrow for `ESCROW_WINDOW_DAYS`
+(default 7). The deal gets an `escrowExpiresAt` deadline, the transaction stays
+`SUCCEEDED`, and both parties see a "Funds secured" state on the deal page. A
+`HOLD` ledger entry records the net amount (amount minus platform fee).
+
+A scheduler calls `POST /api/v1/payments/escrow/process-expired` with the
+`x-cron-secret` header (from `CRON_SECRET`). It refunds every `PAYMENT_PENDING`
+deal whose deadline passed: the gateway refund is issued, the transaction goes
+to `REFUNDED`, the deal to `CANCELLED` with a history entry, and a `REFUND`
+ledger entry is recorded. The whole operation is idempotent, so repeated runs
+never double-refund.
+
+## Fees and payouts
+
+The platform fee is `PLATFORM_FEE_BPS` basis points (default 0 in test mode,
+max 5%). It is computed when checkout starts and stored on the transaction;
+the hold ledger entry records the net. Payouts to sellers happen on handoff
+completion (next chunk). Disputes and split refunds come later.

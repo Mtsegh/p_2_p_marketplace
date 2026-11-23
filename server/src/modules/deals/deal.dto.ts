@@ -26,6 +26,7 @@ export interface DealDto {
   type: DealType;
   amountCents: number | null;
   status: DealStatus;
+  escrowExpiresAt: string | null;
   createdAt: string;
   updatedAt: string;
   history: DealHistoryDto[];
@@ -58,6 +59,7 @@ export function toDealDto(deal: DealWithRelations): DealDto {
     type: deal.type,
     amountCents: deal.amountCents,
     status: deal.status,
+    escrowExpiresAt: deal.escrowExpiresAt?.toISOString() ?? null,
     createdAt: deal.createdAt.toISOString(),
     updatedAt: deal.updatedAt.toISOString(),
     history: deal.history.map((event) => ({

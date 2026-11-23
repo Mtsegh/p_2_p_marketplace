@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
 import { signWebhookBody } from "../src/modules/payments/webhook-signature.js";
+import { env } from "../src/config/env.js";
 import { registerUser, resetIdentityState } from "./helpers.js";
 
 const app = createApp();
@@ -14,6 +15,26 @@ beforeEach(async () => {
 function auth(token: string) {
   return (req: request.Test) =>
     req.set("Authorization", `Bearer ${token}`);
+}
+
+function webhookBody(eventId: string, paymentId: string) {
+  return {
+    id: eventId,
+    type: "payment.succeeded",
+    data: { providerPaymentId: paymentId },
+  };
+}
+
+function postWebhook(payload: object, signature?: string) {
+  const req = request(app)
+    .post("/api/v1/payments/webhook")
+    .set("Content-Type", "application/json");
+
+  if (signature !== undefined) {
+    req.set("x-webhook-signature", signature);
+  }
+
+  return req.send(JSON.stringify(payload));
 }
 
 /** Sets up a verified seller/buyer, an active listing, and an ACCEPTED deal. */
@@ -151,26 +172,6 @@ describe("POST /api/v1/payments/checkout", () => {
 });
 
 describe("POST /api/v1/payments/webhook", () => {
-  function webhookBody(eventId: string, paymentId: string) {
-    return {
-      id: eventId,
-      type: "payment.succeeded",
-      data: { providerPaymentId: paymentId },
-    };
-  }
-
-  function postWebhook(payload: object, signature?: string) {
-    const req = request(app)
-      .post("/api/v1/payments/webhook")
-      .set("Content-Type", "application/json");
-
-    if (signature !== undefined) {
-      req.set("x-webhook-signature", signature);
-    }
-
-    return req.send(JSON.stringify(payload));
-  }
-
   it("rejects a missing or invalid signature", async () => {
     const payload = webhookBody("evt_1", "test_pay_1");
 
@@ -234,5 +235,97 @@ describe("POST /api/v1/payments/webhook", () => {
     const signature = signWebhookBody(JSON.stringify(payload));
 
     await postWebhook(payload, signature).expect(422);
+  });
+});
+
+describe("escrow hold", () => {
+  async function securedDeal() {
+    const { buyer, deal } = await paidDealSetup();
+
+    await auth(buyer.accessToken)(
+      request(app)
+        .post("/api/v1/payments/checkout")
+        .set("Origin", "http://localhost:3000")
+        .send({ dealId: deal.id }),
+    ).expect(201);
+
+    const tx = await prisma.transaction.findFirst({ where: { dealId: deal.id } });
+    const payload = {
+      id: `evt_escrow_${deal.id}`,
+      type: "payment.succeeded",
+      data: { providerPaymentId: tx!.providerPaymentId },
+    };
+    const signature = signWebhookBody(JSON.stringify(payload));
+    await postWebhook(payload, signature).expect(200);
+
+    return { buyer, deal, tx: tx! };
+  }
+
+  it("sets an escrow deadline and a HOLD ledger entry on payment success", async () => {
+    const { deal, tx } = await securedDeal();
+
+    const updated = await prisma.deal.findUnique({ where: { id: deal.id } });
+    expect(updated?.status).toBe("PAYMENT_PENDING");
+    expect(updated?.escrowExpiresAt).not.toBeNull();
+
+    const hold = await prisma.ledgerEntry.findFirst({
+      where: { transactionId: tx.id, type: "HOLD" },
+    });
+    expect(hold).not.toBeNull();
+    expect(hold?.amountCents).toBe(tx.amountCents - tx.feeCents);
+  });
+
+  it("exposes escrowExpiresAt on the deal detail", async () => {
+    const { buyer, deal } = await securedDeal();
+
+    const response = await auth(buyer.accessToken)(
+      request(app).get(`/api/v1/deals/${deal.id}`),
+    ).expect(200);
+    expect(response.body.data.deal.escrowExpiresAt).not.toBeNull();
+  });
+
+  it("refunds an expired escrow automatically and is idempotent", async () => {
+    const { deal, tx } = await securedDeal();
+
+    // Force the deadline into the past.
+    await prisma.deal.update({
+      where: { id: deal.id },
+      data: { escrowExpiresAt: new Date(Date.now() - 1000) },
+    });
+
+    const first = await request(app)
+      .post("/api/v1/payments/escrow/process-expired")
+      .set("x-cron-secret", env.CRON_SECRET)
+      .expect(200);
+    expect(first.body.data.processed).toBeGreaterThanOrEqual(1);
+
+    const updated = await prisma.deal.findUnique({ where: { id: deal.id } });
+    expect(updated?.status).toBe("CANCELLED");
+
+    const updatedTx = await prisma.transaction.findUnique({ where: { id: tx.id } });
+    expect(updatedTx?.status).toBe("REFUNDED");
+
+    const refund = await prisma.ledgerEntry.findFirst({
+      where: { transactionId: tx.id, type: "REFUND" },
+    });
+    expect(refund?.amountCents).toBe(tx.amountCents);
+
+    // A second run must not double-refund or reprocess.
+    const second = await request(app)
+      .post("/api/v1/payments/escrow/process-expired")
+      .set("x-cron-secret", env.CRON_SECRET)
+      .expect(200);
+    expect(second.body.data.processed).toBe(0);
+
+    const refundCount = await prisma.ledgerEntry.count({
+      where: { transactionId: tx.id, type: "REFUND" },
+    });
+    expect(refundCount).toBe(1);
+  });
+
+  it("rejects the processor without the cron secret", async () => {
+    await request(app)
+      .post("/api/v1/payments/escrow/process-expired")
+      .expect(401);
   });
 });

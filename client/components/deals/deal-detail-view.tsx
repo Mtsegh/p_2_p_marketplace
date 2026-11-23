@@ -103,6 +103,7 @@ function DealDetail({ dealId, userId }: { dealId: string; userId: string }) {
         dealStatus={deal.status}
         isSale={deal.type === "SALE"}
         amountCents={deal.amountCents}
+        escrowExpiresAt={deal.escrowExpiresAt}
       />
 
       <DealThread dealId={deal.id} />

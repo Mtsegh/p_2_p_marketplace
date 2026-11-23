@@ -29,12 +29,14 @@ export function PaymentPanel({
   dealStatus,
   isSale,
   amountCents,
+  escrowExpiresAt,
 }: {
   dealId: string;
   isBuyer: boolean;
   dealStatus: string;
   isSale: boolean;
   amountCents: number | null;
+  escrowExpiresAt: string | null;
 }) {
   const queryClient = useQueryClient();
 
@@ -51,7 +53,31 @@ export function PaymentPanel({
     },
   });
 
-  if (!isBuyer || !isSale || amountCents === null) {
+  // Once funds are secured, both buyer and seller see the escrow status.
+  const fundsSecured = dealStatus === "PAYMENT_PENDING" && escrowExpiresAt !== null;
+
+  if (!isSale || amountCents === null) {
+    return null;
+  }
+
+  if (fundsSecured) {
+    return (
+      <section className="rounded-lg border border-success/30 bg-success/5 p-6">
+        <h2 className="text-lg font-semibold">Funds secured</h2>
+        <p className="mt-2 text-sm text-muted">
+          {formatMoney(amountCents)} is held safely by the marketplace. The
+          seller can proceed with the handoff.
+        </p>
+        <p className="mt-1 text-xs text-muted">
+          Funds are returned to the buyer automatically on{" "}
+          {new Date(escrowExpiresAt!).toLocaleDateString("en-US")} if the deal
+          is not completed.
+        </p>
+      </section>
+    );
+  }
+
+  if (!isBuyer) {
     return null;
   }
 

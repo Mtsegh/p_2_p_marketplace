@@ -60,7 +60,16 @@ export async function applySucceededEvent(
     payload: object;
     providerPaymentId: string;
   },
-): Promise<{ alreadyProcessed: boolean; transaction: { id: string; dealId: string } | null }> {
+): Promise<{
+  alreadyProcessed: boolean;
+  transaction: {
+    id: string;
+    dealId: string;
+    amountCents: number;
+    feeCents: number;
+    currency: string;
+  } | null;
+}> {
   // The unique index on provider_event_id makes duplicate detection atomic.
   const existing = await tx.webhookEvent.findUnique({
     where: { providerEventId: input.providerEventId },
@@ -82,7 +91,13 @@ export async function applySucceededEvent(
   const transaction = await tx.transaction.update({
     where: { providerPaymentId: input.providerPaymentId },
     data: { status: "SUCCEEDED" as TransactionStatus },
-    select: { id: true, dealId: true },
+    select: {
+      id: true,
+      dealId: true,
+      amountCents: true,
+      feeCents: true,
+      currency: true,
+    },
   });
 
   return { alreadyProcessed: false, transaction };
