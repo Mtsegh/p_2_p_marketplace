@@ -774,9 +774,24 @@ replayed event changes nothing. A genuine `payment.succeeded` marks the
 transaction `SUCCEEDED` and moves the deal to `PAYMENT_PENDING` with a history
 entry, atomically. Invalid signatures return `401 INVALID_SIGNATURE`.
 
+### Exchange dual-lock handoff
+
+Exchange deals complete only after **both** parties confirm the handoff. A pure
+exchange (no cash top-up) moves to `PAYMENT_PENDING` on acceptance; an exchange
+with a cash top-up reaches it after the buyer pays. Each party calls
+`POST /api/v1/deals/:dealId/handoff/confirm` once. One-sided confirmation
+leaves the deal pending with that side's `buyerConfirmedAt` / `sellerConfirmedAt`
+timestamp recorded. When the second confirmation arrives, the deal becomes
+`COMPLETED` and any cash top-up held in escrow is released via payout —
+atomically. A repeat confirmation from the same party is a no-op.
+
+`POST /api/v1/deals/:dealId/handoff/confirm` returns
+`{ "data": { "status", "buyerConfirmedAt", "sellerConfirmedAt", "completed" } }`.
+
 ### Handoff code
 
-Handoff is the step where the buyer inspects the item and the seller confirms
+Sale deals use the one-time handoff code below; exchange deals use dual
+confirmation instead. Handoff is the step where the buyer inspects the item and the seller confirms
 receipt to release funds. Only available while the deal is `PAYMENT_PENDING`.
 The code is a 6-digit value; only its SHA-256 hash is stored, it expires after
 `HANDOFF_CODE_TTL_MINUTES`, and wrong attempts are limited to

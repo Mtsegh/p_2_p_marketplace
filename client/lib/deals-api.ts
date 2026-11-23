@@ -51,6 +51,8 @@ export interface Deal {
   amountCents: number | null;
   status: DealStatus;
   escrowExpiresAt: string | null;
+  buyerConfirmedAt: string | null;
+  sellerConfirmedAt: string | null;
   createdAt: string;
   updatedAt: string;
   history: DealHistoryItem[];
@@ -179,6 +181,25 @@ export async function postDealMessage(
   );
 
   return response.data.message;
+}
+
+export interface ExchangeConfirmation {
+  status: DealStatus;
+  buyerConfirmedAt: string | null;
+  sellerConfirmedAt: string | null;
+  completed: boolean;
+}
+
+/** Confirms an exchange handoff; completion requires both parties. */
+export async function confirmExchangeHandoff(
+  dealId: string,
+): Promise<ExchangeConfirmation> {
+  const response = await apiRequestJson<{ data: ExchangeConfirmation }>(
+    `/api/v1/deals/${encodeURIComponent(dealId)}/handoff/confirm`,
+    "POST",
+  );
+
+  return response.data;
 }
 
 export const acceptDeal = (dealId: string) => transition(dealId, "accept");

@@ -1,5 +1,6 @@
 import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../db/prisma.js";
+import { env } from "../../config/env.js";
 import { AppError } from "../../lib/app-error.js";
 import { logger } from "../../lib/logger.js";
 import { notifyDealEvent, type DealEvent } from "../notifications/deal-notifications.service.js";
@@ -250,6 +251,27 @@ export async function acceptDeal(dealId: string, userId: string) {
       409,
       "This listing is no longer available",
     );
+  }
+
+  // A pure exchange (no cash top-up) has no payment step, so move it straight
+  // into the handoff phase where both parties must confirm.
+  if (deal.type === "EXCHANGE" && (deal.amountCents === null || deal.amountCents === 0)) {
+    const escrowExpiresAt = new Date(Date.now() + env.ESCROW_WINDOW_DAYS * 86_400_000);
+    await prisma.$transaction(async (tx) => {
+      await tx.deal.update({
+        where: { id: deal.id },
+        data: { status: "PAYMENT_PENDING", escrowExpiresAt },
+      });
+      await tx.dealHistory.create({
+        data: {
+          dealId: deal.id,
+          fromStatus: "ACCEPTED",
+          toStatus: "PAYMENT_PENDING",
+          note: "Exchange accepted; awaiting handoff confirmation from both parties",
+        },
+      });
+    });
+    updated.status = "PAYMENT_PENDING";
   }
 
   await notify({

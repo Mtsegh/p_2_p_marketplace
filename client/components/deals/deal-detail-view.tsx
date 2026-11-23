@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { DealThread } from "@/components/deals/deal-thread";
 import { PaymentPanel } from "@/components/deals/payment-panel";
 import { HandoffPanel } from "@/components/deals/handoff-panel";
+import { ExchangeConfirmPanel } from "@/components/deals/exchange-confirm-panel";
 import { Alert } from "@/components/ui/alert";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useQuery } from "@tanstack/react-query";
@@ -107,11 +108,21 @@ function DealDetail({ dealId, userId }: { dealId: string; userId: string }) {
         escrowExpiresAt={deal.escrowExpiresAt}
       />
 
-      <HandoffPanel
-        dealId={deal.id}
-        isBuyer={deal.buyerId === userId}
-        dealStatus={deal.status}
-      />
+      {deal.type === "EXCHANGE" ? (
+        <ExchangeConfirmPanel
+          dealId={deal.id}
+          buyerConfirmedAt={deal.buyerConfirmedAt}
+          sellerConfirmedAt={deal.sellerConfirmedAt}
+          isBuyer={deal.buyerId === userId}
+          dealStatus={deal.status}
+        />
+      ) : (
+        <HandoffPanel
+          dealId={deal.id}
+          isBuyer={deal.buyerId === userId}
+          dealStatus={deal.status}
+        />
+      )}
 
       <DealThread dealId={deal.id} />
     </div>

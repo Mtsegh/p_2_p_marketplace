@@ -27,6 +27,8 @@ export interface DealDto {
   amountCents: number | null;
   status: DealStatus;
   escrowExpiresAt: string | null;
+  buyerConfirmedAt: string | null;
+  sellerConfirmedAt: string | null;
   createdAt: string;
   updatedAt: string;
   history: DealHistoryDto[];
@@ -60,6 +62,8 @@ export function toDealDto(deal: DealWithRelations): DealDto {
     amountCents: deal.amountCents,
     status: deal.status,
     escrowExpiresAt: deal.escrowExpiresAt?.toISOString() ?? null,
+    buyerConfirmedAt: deal.buyerConfirmedAt?.toISOString() ?? null,
+    sellerConfirmedAt: deal.sellerConfirmedAt?.toISOString() ?? null,
     createdAt: deal.createdAt.toISOString(),
     updatedAt: deal.updatedAt.toISOString(),
     history: deal.history.map((event) => ({

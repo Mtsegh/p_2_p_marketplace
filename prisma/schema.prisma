@@ -111,6 +111,9 @@ model Deal {
   handoffCodeHash String?  @map("handoff_code_hash") @db.VarChar(64)
   handoffCodeExpiresAt DateTime? @map("handoff_code_expires_at") @db.Timestamptz(3)
   handoffAttempts Int      @default(0) @map("handoff_attempts")
+  /// Exchange deals complete only after both parties confirm the handoff.
+  buyerConfirmedAt  DateTime? @map("buyer_confirmed_at") @db.Timestamptz(3)
+  sellerConfirmedAt DateTime? @map("seller_confirmed_at") @db.Timestamptz(3)
   completedAt DateTime?    @map("completed_at") @db.Timestamptz(3)
   createdAt  DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt  DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)

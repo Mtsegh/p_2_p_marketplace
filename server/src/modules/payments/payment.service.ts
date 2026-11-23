@@ -31,11 +31,18 @@ export async function createCheckout(userId: string, dealId: string) {
     throw new AppError("FORBIDDEN", 403, "Only the buyer can pay for this deal");
   }
 
-  if (deal.type !== "SALE" || deal.amountCents === null) {
+  // Sale deals always have a price. Exchange deals are payable only when a
+  // cash top-up was offered, which is stored in amountCents.
+  const payable =
+    deal.type === "SALE"
+      ? deal.amountCents !== null
+      : deal.amountCents !== null && deal.amountCents > 0;
+
+  if (!payable) {
     throw new AppError(
       "NOT_A_SALE_DEAL",
       422,
-      "Only sale deals with a price can be paid",
+      "This deal has no amount to pay",
     );
   }
 
@@ -61,7 +68,7 @@ export async function createCheckout(userId: string, dealId: string) {
   }
 
   const intent = await testPaymentProvider.createPayment({
-    amountCents: deal.amountCents,
+    amountCents: deal.amountCents!,
     currency: "USD",
     description: `Payment for deal ${deal.id}`,
     idempotencyKey: deal.id,

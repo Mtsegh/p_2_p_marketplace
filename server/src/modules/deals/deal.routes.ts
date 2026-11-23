@@ -5,6 +5,7 @@ import { requireAuth, requireVerifiedEmail } from "../auth/auth.middleware.js";
 import * as controller from "./deal.controller.js";
 import * as messageController from "./message.controller.js";
 import * as handoffController from "./handoff.controller.js";
+import * as exchangeHandoffController from "./exchange-handoff.controller.js";
 
 export const dealRouter = Router();
 
@@ -119,4 +120,13 @@ dealRouter.post(
   requireAuth,
   modifyLimit,
   handoffController.completeHandoff,
+);
+
+// Exchange deals require both parties to confirm the handoff.
+dealRouter.post(
+  "/:dealId/handoff/confirm",
+  requireTrustedOrigin,
+  requireAuth,
+  modifyLimit,
+  exchangeHandoffController.confirmExchangeHandoff,
 );
