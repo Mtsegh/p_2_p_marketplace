@@ -91,6 +91,7 @@ export function ReviewForm({
                 key={value}
                 type="button"
                 aria-label={`${value} star${value > 1 ? "s" : ""}`}
+                aria-pressed={value === rating}
                 onClick={() => setRating(value)}
                 className={`text-2xl ${value <= rating ? "text-warning" : "text-muted"}`}
               >

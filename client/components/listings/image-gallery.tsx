@@ -39,7 +39,7 @@ function ImageItem({
         size="sm"
         onClick={onDelete}
         loading={isDeleting}
-        className="absolute top-1 right-1 -mx-1 -my-1 opacity-0 group-hover:opacity-100 transition-opacity"
+        className="absolute top-1 right-1 -mx-1 -my-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
         aria-label="Delete image"
       >
         &times;

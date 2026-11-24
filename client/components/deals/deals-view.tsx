@@ -82,13 +82,25 @@ export function DealsView() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex gap-2" role="tablist" aria-label="Deal role">
+      <div
+        className="flex gap-2"
+        role="tablist"
+        aria-label="Deal role"
+        onKeyDown={(event) => {
+          if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+          event.preventDefault();
+          setRole(role === "buyer" ? "seller" : "buyer");
+        }}
+      >
         {(["buyer", "seller"] as DealRole[]).map((option) => (
           <button
             key={option}
             type="button"
             role="tab"
+            id={`deal-tab-${option}`}
+            aria-controls="deal-role-panel"
             aria-selected={role === option}
+            tabIndex={role === option ? 0 : -1}
             onClick={() => setRole(option)}
             className={`rounded-md px-4 py-2 text-sm font-medium ${
               role === option
@@ -101,7 +113,14 @@ export function DealsView() {
         ))}
       </div>
 
-      <DealsList role={role} />
+      <div
+        role="tabpanel"
+        id="deal-role-panel"
+        aria-labelledby={`deal-tab-${role}`}
+        tabIndex={0}
+      >
+        <DealsList role={role} />
+      </div>
     </div>
   );
 }

@@ -590,13 +590,27 @@ export function AdminDashboard() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Admin sections">
+      <div
+        className="flex flex-wrap gap-2"
+        role="tablist"
+        aria-label="Admin sections"
+        onKeyDown={(event) => {
+          if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+          event.preventDefault();
+          const current = TABS.findIndex((item) => item.key === tab);
+          const step = event.key === "ArrowRight" ? 1 : -1;
+          setTab(TABS[(current + step + TABS.length) % TABS.length]!.key);
+        }}
+      >
         {TABS.map((item) => (
           <button
             key={item.key}
             type="button"
             role="tab"
+            id={`admin-tab-${item.key}`}
+            aria-controls="admin-tab-panel"
             aria-selected={tab === item.key}
+            tabIndex={tab === item.key ? 0 : -1}
             onClick={() => setTab(item.key)}
             className={`rounded-md px-4 py-2 text-sm font-medium ${
               tab === item.key
@@ -609,12 +623,19 @@ export function AdminDashboard() {
         ))}
       </div>
 
-      {tab === "users" ? <UsersPanel /> : null}
-      {tab === "listings" ? <ListingsPanel /> : null}
-      {tab === "disputes" ? <DisputesPanel /> : null}
-      {tab === "reports" ? <ReportsPanel /> : null}
-      {tab === "settings" ? <SettingsPanel /> : null}
-      {tab === "audit" ? <AuditPanel /> : null}
+      <div
+        role="tabpanel"
+        id="admin-tab-panel"
+        aria-labelledby={`admin-tab-${tab}`}
+        tabIndex={0}
+      >
+        {tab === "users" ? <UsersPanel /> : null}
+        {tab === "listings" ? <ListingsPanel /> : null}
+        {tab === "disputes" ? <DisputesPanel /> : null}
+        {tab === "reports" ? <ReportsPanel /> : null}
+        {tab === "settings" ? <SettingsPanel /> : null}
+        {tab === "audit" ? <AuditPanel /> : null}
+      </div>
     </div>
   );
 }
