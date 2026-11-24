@@ -2,7 +2,7 @@ import request from "supertest";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
-import { registerUser, resetIdentityState } from "./helpers.js";
+import { createAdmin, registerUser, resetIdentityState } from "./helpers.js";
 
 const app = createApp();
 
@@ -29,6 +29,35 @@ describe("GET /api/v1/listings/categories", () => {
       slug: "electronics",
       activeListingCount: expect.any(Number),
     });
+  });
+
+  it("invalidates the cached list when an admin adds a category", async () => {
+    await prisma.category.create({
+      data: { name: "Electronics", slug: "electronics" },
+    });
+    const admin = await createAdmin(app);
+
+    // First read populates the Redis cache.
+    const before = await request(app)
+      .get("/api/v1/listings/categories")
+      .expect(200);
+    expect(before.body.data.categories).toHaveLength(1);
+
+    await request(app)
+      .post("/api/v1/listings/categories")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .set("Origin", "http://localhost:3000")
+      .send({ name: "Books", slug: "books" })
+      .expect(201);
+
+    // The write invalidates the cache, so the new category is visible at once.
+    const after = await request(app)
+      .get("/api/v1/listings/categories")
+      .expect(200);
+    expect(after.body.data.categories).toHaveLength(2);
+    expect(
+      after.body.data.categories.map((category: { slug: string }) => category.slug),
+    ).toContain("books");
   });
 });
 

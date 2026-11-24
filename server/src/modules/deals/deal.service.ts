@@ -2,6 +2,7 @@ import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../db/prisma.js";
 import { env } from "../../config/env.js";
 import { AppError } from "../../lib/app-error.js";
+import { invalidateCache } from "../../lib/cache.js";
 import { logger } from "../../lib/logger.js";
 import { notifyDealEvent, type DealEvent } from "../notifications/deal-notifications.service.js";
 import * as repository from "./deal.repository.js";
@@ -273,6 +274,9 @@ export async function acceptDeal(dealId: string, userId: string) {
     });
     updated.status = "PAYMENT_PENDING";
   }
+
+  // The listing left ACTIVE, so refresh the cached category counts.
+  await invalidateCache("categories:v1");
 
   await notify({
     dealId: deal.id,

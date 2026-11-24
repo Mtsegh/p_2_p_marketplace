@@ -74,6 +74,7 @@ model Review {
 
   @@unique([dealId, authorId])
   @@index([subjectId])
+  @@index([subjectId, createdAt])
   @@map("reviews")
 }
 
@@ -199,6 +200,8 @@ model Deal {
   @@index([buyerId])
   @@index([sellerId])
   @@index([status])
+  @@index([buyerId, createdAt])
+  @@index([sellerId, createdAt])
   @@map("deals")
 }
 
@@ -258,6 +261,7 @@ model Report {
   resolvedBy User? @relation("ResolvedReports", fields: [resolvedById], references: [id], onDelete: SetNull)
 
   @@index([status])
+  @@index([status, createdAt])
   @@index([targetType, targetId])
   @@map("reports")
 }
@@ -293,6 +297,7 @@ model Dispute {
   evidence   DisputeEvidence[]
 
   @@index([status])
+  @@index([status, createdAt])
   @@map("disputes")
 }
 
@@ -352,6 +357,7 @@ model Transaction {
   ledgerEntries LedgerEntry[]
 
   @@index([dealId])
+  @@index([dealId, createdAt])
   @@index([status])
   @@map("transactions")
 }
@@ -376,6 +382,7 @@ model LedgerEntry {
   transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
 
   @@index([transactionId])
+  @@index([transactionId, type])
   @@map("ledger_entries")
 }
 
@@ -533,6 +540,7 @@ model Listing {
   searchVector Unsupported("tsvector")? @map("search_vector")
 
   @@index([ownerId])
+  @@index([ownerId, createdAt])
   @@index([categoryId])
   @@index([status])
   @@index([listingType])

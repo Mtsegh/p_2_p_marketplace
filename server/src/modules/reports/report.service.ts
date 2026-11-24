@@ -1,5 +1,6 @@
 import { prisma } from "../../db/prisma.js";
 import { AppError } from "../../lib/app-error.js";
+import { invalidateCache } from "../../lib/cache.js";
 import type { CreateReportInput } from "./report.schemas.js";
 
 /**
@@ -85,7 +86,7 @@ export async function resolveReport(
     suspendUser?: boolean;
   },
 ) {
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const report = await tx.report.findUnique({ where: { id: reportId } });
 
     if (!report) {
@@ -126,4 +127,14 @@ export async function resolveReport(
       },
     });
   });
+
+  if (
+    result?.targetType === "listing" &&
+    input.action === "actioned" &&
+    input.suspendUser
+  ) {
+    await invalidateCache("categories:v1");
+  }
+
+  return result;
 }

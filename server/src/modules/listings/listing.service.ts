@@ -1,4 +1,5 @@
 import { AppError } from "../../lib/app-error.js";
+import { cached, invalidateCache } from "../../lib/cache.js";
 import { prisma } from "../../db/prisma.js";
 import { toCategoryDto, toListingDto } from "./listing.dto.js";
 import * as repository from "./listing.repository.js";
@@ -8,6 +9,14 @@ import type {
   ListListingsQuery,
   UpdateListingInput,
 } from "./listing.schemas.js";
+
+/**
+ * Categories are read on every browse page load, so they are cached briefly.
+ * The cache is invalidated whenever a category or a listing status changes
+ * (the endpoint includes an active-listing count).
+ */
+const CATEGORIES_CACHE_KEY = "categories:v1";
+const CATEGORIES_CACHE_TTL = 60;
 
 /**
  * Creates a listing for the authenticated user. Only verified email users can
@@ -30,7 +39,7 @@ export async function createListing(
     );
   }
 
-  return repository.createListing({
+  const created = await repository.createListing({
     ownerId,
     categoryId: input.categoryId ?? null,
     title: input.title,
@@ -41,6 +50,9 @@ export async function createListing(
     status: "DRAFT",
     location: input.location,
   });
+
+  await invalidateCache(CATEGORIES_CACHE_KEY);
+  return created;
 }
 
 /**
@@ -79,7 +91,7 @@ export async function updateListing(
     );
   }
 
-  return repository.updateListing(listingId, {
+  const updated = await repository.updateListing(listingId, {
     ...(input.title !== undefined && { title: input.title }),
     ...(input.description !== undefined && { description: input.description }),
     ...(input.condition !== undefined && { condition: input.condition }),
@@ -91,6 +103,9 @@ export async function updateListing(
     }),
     ...(input.location !== undefined && { location: input.location }),
   });
+
+  await invalidateCache(CATEGORIES_CACHE_KEY);
+  return updated;
 }
 
 /**
@@ -124,7 +139,10 @@ export async function deleteListing(listingId: string, userId: string) {
     );
   }
 
-  return repository.deleteListing(listingId);
+  const deleted = await repository.deleteListing(listingId);
+
+  await invalidateCache(CATEGORIES_CACHE_KEY);
+  return deleted;
 }
 
 /**
@@ -154,7 +172,10 @@ export async function publishListing(listingId: string, userId: string) {
     );
   }
 
-  return repository.updateListing(listingId, { status: "ACTIVE" });
+  const published = await repository.updateListing(listingId, { status: "ACTIVE" });
+
+  await invalidateCache(CATEGORIES_CACHE_KEY);
+  return published;
 }
 
 /**
@@ -197,12 +218,14 @@ export async function listListingsByOwner(
  * Returns all categories with their active listing count.
  */
 export async function listCategories() {
-  const categories = await repository.listCategories();
+  return cached(CATEGORIES_CACHE_KEY, CATEGORIES_CACHE_TTL, async () => {
+    const categories = await repository.listCategories();
 
-  return categories.map((category) => ({
-    ...toCategoryDto(category),
-    activeListingCount: category._count.listings,
-  }));
+    return categories.map((category) => ({
+      ...toCategoryDto(category),
+      activeListingCount: category._count.listings,
+    }));
+  });
 }
 
 /**
@@ -217,7 +240,10 @@ export async function createCategory(input: { name: string; slug: string }) {
     throw new AppError("CATEGORY_IN_USE", 409, "This category slug already exists");
   }
 
-  return prisma.category.create({
+  const category = await prisma.category.create({
     data: { name: input.name, slug: input.slug },
   });
+
+  await invalidateCache(CATEGORIES_CACHE_KEY);
+  return category;
 }

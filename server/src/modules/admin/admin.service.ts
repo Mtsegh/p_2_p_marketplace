@@ -1,6 +1,7 @@
 import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../db/prisma.js";
 import { AppError } from "../../lib/app-error.js";
+import { invalidateCache } from "../../lib/cache.js";
 import { toUserDto } from "../auth/auth.dto.js";
 import { getEffectiveSettings, type EffectiveSettings } from "./admin.settings.js";
 import type { ListingParams, SettingsInput } from "./admin.types.js";
@@ -72,7 +73,7 @@ export async function moderateListing(
 ) {
   const status = action === "remove" ? "REMOVED" : "ACTIVE";
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const listing = await tx.listing.findUnique({ where: { id: listingId } });
 
     if (!listing) {
@@ -94,6 +95,9 @@ export async function moderateListing(
 
     return { id: listing.id, title: listing.title, status };
   });
+
+  await invalidateCache("categories:v1");
+  return result;
 }
 
 /** Persists validated settings and records each change in the audit log. */
