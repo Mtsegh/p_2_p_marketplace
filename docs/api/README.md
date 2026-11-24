@@ -934,6 +934,41 @@ Administrators only (`ADMIN` role, enforced server-side).
 `nextCursor` is `null` on the last page. User objects never include the password
 hash.
 
+## Disputes
+
+Either participant may open a dispute while a deal's funds are secured
+(`PAYMENT_PENDING`). Opening a dispute moves the deal to `DISPUTED`, which
+freezes the escrow-expiry refund processor. Only one dispute may exist per deal,
+and only an admin may resolve one. Resolution moves money via the gateway and
+records ledger entries, then marks the dispute `RESOLVED` and the deal
+`RESOLVED`. Resolving twice is rejected (`409 DISPUTE_RESOLVED`).
+
+Resolution options:
+- `RELEASE` — all net funds to the seller
+- `REFUND` — all net funds back to the buyer
+- `SPLIT` — half to each side (seller gets `floor(net/2)`)
+
+Both parties are emailed once about the outcome.
+
+### `POST /api/v1/disputes`
+
+Requires `Authorization` and a trusted `Origin`. Body:
+`{ "dealId": "<uuid>", "reason": "<10-2000 chars>" }`. `201` with the dispute.
+
+### `GET /api/v1/disputes/deal/:dealId`
+
+Returns the dispute for a deal, or `404` if none. Participants only.
+
+### `GET /api/v1/disputes`
+
+Admin only. Returns all disputes, newest first.
+
+### `PATCH /api/v1/disputes/:disputeId/resolve`
+
+Admin only. Body:
+`{ "resolution": "RELEASE" | "REFUND" | "SPLIT", "note"?: string }`.
+`200` with the resolved dispute.
+
 ### Admin dashboard endpoints
 
 All endpoints below require the `ADMIN` role. Every mutation writes an

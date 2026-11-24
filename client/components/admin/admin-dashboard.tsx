@@ -19,12 +19,19 @@ import {
   updateSettings,
   type PlatformSettings,
 } from "@/lib/admin-api";
+import {
+  fetchDisputes,
+  resolveDispute,
+  RESOLUTION_LABELS,
+  type Dispute,
+} from "@/lib/disputes-api";
 
-type Tab = "users" | "listings" | "settings" | "audit";
+type Tab = "users" | "listings" | "disputes" | "settings" | "audit";
 
 const TABS: Array<{ key: Tab; label: string }> = [
   { key: "users", label: "Users" },
   { key: "listings", label: "Listings" },
+  { key: "disputes", label: "Disputes" },
   { key: "settings", label: "Settings" },
   { key: "audit", label: "Audit log" },
 ];
@@ -348,6 +355,107 @@ function AuditPanel() {
   );
 }
 
+function DisputesPanel() {
+  const queryClient = useQueryClient();
+  const query = useQuery({ queryKey: ["admin", "disputes"], queryFn: fetchDisputes });
+  const [selected, setSelected] = useState<Dispute | null>(null);
+  const [resolution, setResolution] = useState<"RELEASE" | "REFUND" | "SPLIT">("REFUND");
+  const [note, setNote] = useState("");
+
+  const mutation = useMutation({
+    mutationFn: () => resolveDispute(selected!.id, resolution, note || undefined),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "disputes"] });
+      setSelected(null);
+      setNote("");
+    },
+  });
+
+  if (query.isLoading) return <p className="text-muted">Loading disputes…</p>;
+
+  const disputes = query.data ?? [];
+  const open = disputes.filter((dispute) => dispute.status === "OPEN");
+
+  return (
+    <div className="flex flex-col gap-4">
+      {mutation.isError ? (
+        <Alert tone="danger" title="Could not resolve the dispute">
+          {mutation.error instanceof ApiError ? mutation.error.message : "Try again."}
+        </Alert>
+      ) : null}
+
+      {open.length === 0 ? (
+        <EmptyState title="No open disputes" description="New disputes will appear here." />
+      ) : null}
+
+      <ul className="flex flex-col gap-3">
+        {open.map((dispute) => (
+          <li
+            key={dispute.id}
+            className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-line bg-surface p-4"
+          >
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium">Deal: {dispute.dealId}</p>
+              <p className="mt-1 whitespace-pre-line text-sm text-muted">
+                {dispute.reason}
+              </p>
+              <p className="mt-1 text-xs text-muted">
+                Opened by {dispute.openedById} ·{" "}
+                {new Date(dispute.createdAt).toLocaleString("en-US")}
+              </p>
+            </div>
+            <div className="w-full sm:w-56">
+              {selected?.id === dispute.id ? (
+                <div className="flex flex-col gap-2">
+                  <select
+                    aria-label="Resolution"
+                    value={resolution}
+                    onChange={(event) =>
+                      setResolution(event.target.value as typeof resolution)
+                    }
+                    className="h-11 w-full rounded-md border border-line bg-surface px-3 text-sm"
+                  >
+                    {(Object.keys(RESOLUTION_LABELS) as Array<keyof typeof RESOLUTION_LABELS>).map(
+                      (key) => (
+                        <option key={key} value={key}>
+                          {RESOLUTION_LABELS[key]}
+                        </option>
+                      ),
+                    )}
+                  </select>
+                  <TextField
+                    label="Note (optional)"
+                    value={note}
+                    onChange={(event) => setNote(event.target.value)}
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="danger"
+                      loading={mutation.isPending}
+                      disabled={mutation.isPending}
+                      onClick={() => mutation.mutate()}
+                    >
+                      Resolve
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setSelected(null)}>
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <Button size="sm" variant="secondary" onClick={() => setSelected(dispute)}>
+                  Review
+                </Button>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function AdminDashboard() {
   const { user } = useAuth();
   const [tab, setTab] = useState<Tab>("users");
@@ -384,6 +492,7 @@ export function AdminDashboard() {
 
       {tab === "users" ? <UsersPanel /> : null}
       {tab === "listings" ? <ListingsPanel /> : null}
+      {tab === "disputes" ? <DisputesPanel /> : null}
       {tab === "settings" ? <SettingsPanel /> : null}
       {tab === "audit" ? <AuditPanel /> : null}
     </div>

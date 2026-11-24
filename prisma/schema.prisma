@@ -99,6 +99,10 @@ model User {
   dealMessages DealMessage[]
   /// Admin actions performed by this user.
   adminActions AdminAuditLog[]
+  /// Disputes opened by this user.
+  openedDisputes   Dispute[] @relation("OpenedDisputes")
+  /// Disputes resolved by this admin.
+  resolvedDisputes Dispute[] @relation("ResolvedDisputes")
 
   @@map("users")
 }
@@ -159,6 +163,8 @@ model Deal {
   messages DealMessage[]
   /// Payment transactions for this deal.
   transactions Transaction[]
+  /// A dispute opened while funds were secured (at most one per deal).
+  dispute   Dispute?
 
   @@index([listingId])
   @@index([buyerId])
@@ -198,6 +204,55 @@ model DealHistory {
 
   @@index([dealId])
   @@map("deal_history")
+}
+
+enum DisputeStatus {
+  OPEN
+  RESOLVED
+}
+
+enum DisputeResolution {
+  RELEASE
+  REFUND
+  SPLIT
+}
+
+/// A dispute on a deal, openable by either participant while funds are secured.
+/// An admin resolves it by releasing, refunding, or splitting the held amount.
+model Dispute {
+  id             String             @id @default(uuid()) @db.Uuid
+  dealId         String             @unique @map("deal_id") @db.Uuid
+  openedById     String             @map("opened_by_id") @db.Uuid
+  reason         String             @map("reason") @db.Text
+  status         DisputeStatus      @default(OPEN) @map("status")
+  resolution     DisputeResolution? @map("resolution")
+  resolutionNote String?            @map("resolution_note") @db.Text
+  resolvedById   String?            @map("resolved_by_id") @db.Uuid
+  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  resolvedAt     DateTime?          @map("resolved_at") @db.Timestamptz(3)
+
+  deal       Deal  @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  openedBy   User  @relation("OpenedDisputes", fields: [openedById], references: [id], onDelete: Cascade)
+  resolvedBy User? @relation("ResolvedDisputes", fields: [resolvedById], references: [id], onDelete: SetNull)
+  evidence   DisputeEvidence[]
+
+  @@index([status])
+  @@map("disputes")
+}
+
+/// Evidence file attached to a dispute (stored by key, like listing images).
+model DisputeEvidence {
+  id        String   @id @default(uuid()) @db.Uuid
+  disputeId String   @map("dispute_id") @db.Uuid
+  key       String   @map("key") @db.VarChar(500)
+  url       String   @map("url") @db.VarChar(1000)
+  mimeType  String   @map("mime_type") @db.VarChar(100)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  dispute Dispute @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+
+  @@index([disputeId])
+  @@map("dispute_evidence")
 }
 
 /// A message in a deal's thread. Only the deal's buyer and seller can read or

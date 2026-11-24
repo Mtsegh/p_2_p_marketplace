@@ -98,9 +98,9 @@ export async function moderateListing(
 
 /** Persists validated settings and records each change in the audit log. */
 export async function updateSettings(actorId: string, input: SettingsInput) {
-  return prisma.$transaction(async (tx) => {
-    const before = await getEffectiveSettings();
+  const before = await getEffectiveSettings();
 
+  await prisma.$transaction(async (tx) => {
     for (const [key, value] of Object.entries(input)) {
       if (value === undefined) continue;
 
@@ -112,9 +112,10 @@ export async function updateSettings(actorId: string, input: SettingsInput) {
 
       await audit(tx, actorId, `setting.${key}`, "setting", key, { value: before[key as keyof EffectiveSettings] }, { value });
     }
-
-    return getEffectiveSettings();
   });
+
+  // Read after commit so the response reflects the persisted values.
+  return getEffectiveSettings();
 }
 
 export async function getSettings(): Promise<EffectiveSettings> {
