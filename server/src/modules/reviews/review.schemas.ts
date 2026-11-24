@@ -12,10 +12,18 @@ export const createReviewSchema = z
 
 export const reviewsQuerySchema = z
   .object({
-    userId: id.optional(),
+    userId: id,
     limit: z.coerce.number().int().min(1).max(100).default(20),
     cursor: z.string().uuid().optional(),
   })
+  .strict();
+
+export const trustQuerySchema = z
+  .object({ userId: id })
+  .strict();
+
+export const myReviewQuerySchema = z
+  .object({ dealId: id })
   .strict();
 
 export type CreateReviewInput = z.infer<typeof createReviewSchema>;
