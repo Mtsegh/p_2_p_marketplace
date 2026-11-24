@@ -13,6 +13,7 @@ import { PaymentPanel } from "@/components/deals/payment-panel";
 import { HandoffPanel } from "@/components/deals/handoff-panel";
 import { ExchangeConfirmPanel } from "@/components/deals/exchange-confirm-panel";
 import { DisputePanel } from "@/components/deals/dispute-panel";
+import { ReviewForm } from "@/components/deals/review-form";
 import { Alert } from "@/components/ui/alert";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useQuery } from "@tanstack/react-query";
@@ -128,6 +129,8 @@ function DealDetail({ dealId, userId }: { dealId: string; userId: string }) {
       <DealThread dealId={deal.id} />
 
       <DisputePanel dealId={deal.id} dealStatus={deal.status} />
+
+      <ReviewForm dealId={deal.id} dealStatus={deal.status} />
     </div>
   );
 }

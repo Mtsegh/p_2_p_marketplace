@@ -57,6 +57,26 @@ model AdminAuditLog {
   @@map("admin_audit_log")
 }
 
+/// A two-way review between two participants of a completed deal. One review
+/// per author per deal; only completed-deal participants may write one.
+model Review {
+  id         String   @id @default(uuid()) @db.Uuid
+  dealId     String   @map("deal_id") @db.Uuid
+  authorId   String   @map("author_id") @db.Uuid
+  subjectId  String   @map("subject_id") @db.Uuid
+  rating     Int      @map("rating")
+  comment    String?  @map("comment") @db.Text
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  deal    Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  author  User @relation("AuthoredReviews", fields: [authorId], references: [id], onDelete: Cascade)
+  subject User @relation("ReceivedReviews", fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@unique([dealId, authorId])
+  @@index([subjectId])
+  @@map("reviews")
+}
+
 /// Editable platform settings (e.g. fee basis points, escrow window). Values
 /// are stored as JSON; the service validates types and ranges before writing.
 model PlatformSetting {
@@ -103,6 +123,10 @@ model User {
   openedDisputes   Dispute[] @relation("OpenedDisputes")
   /// Disputes resolved by this admin.
   resolvedDisputes Dispute[] @relation("ResolvedDisputes")
+  /// Reviews written by this user.
+  authoredReviews Review[] @relation("AuthoredReviews")
+  /// Reviews received by this user.
+  receivedReviews Review[] @relation("ReceivedReviews")
 
   @@map("users")
 }
@@ -165,6 +189,7 @@ model Deal {
   transactions Transaction[]
   /// A dispute opened while funds were secured (at most one per deal).
   dispute   Dispute?
+  reviews   Review[]
 
   @@index([listingId])
   @@index([buyerId])

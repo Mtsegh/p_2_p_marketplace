@@ -4,6 +4,7 @@ import { cache } from "react";
 import { PageContainer } from "@/components/layout/page-container";
 import { Badge } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button";
+import { ReviewsSection } from "@/components/profile/reviews-section";
 import { ApiError } from "@/lib/api";
 import { displayNameOf, initialsForUser } from "@/lib/profile-display";
 import { fetchPublicProfile } from "@/lib/profiles-api";
@@ -115,6 +116,8 @@ export default async function PublicProfilePage({ params }: PageProps) {
             </p>
           )}
         </section>
+
+        <ReviewsSection userId={profile.id} />
 
         <div>
           <ButtonLink href="/browse" variant="secondary">

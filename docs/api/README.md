@@ -969,6 +969,33 @@ Admin only. Body:
 `{ "resolution": "RELEASE" | "REFUND" | "SPLIT", "note"?: string }`.
 `200` with the resolved dispute.
 
+## Reviews and trust
+
+A member may review the other participant of a **completed** deal, once per
+deal. Ratings are 1-5 and an optional comment (up to 2000 chars). The review
+subject is derived from the deal — a client cannot choose whom to review. A
+user's public profile shows a trust badge (average rating and review count),
+and the seller card on a listing shows the same signal.
+
+### `POST /api/v1/reviews`
+
+Requires `Authorization` and a trusted `Origin`. Body:
+`{ "dealId": "<uuid>", "rating": 1-5, "comment"?: string }`. `201` with the
+review. `409 DEAL_NOT_COMPLETED` if the deal is not complete; `403` for a
+non-participant; `409 REVIEW_EXISTS` on a duplicate.
+
+### `GET /api/v1/reviews?userId=<uuid>`
+
+Public. Paginated (`limit`, `cursor`) reviews received by a user, newest first.
+
+### `GET /api/v1/reviews/trust?userId=<uuid>`
+
+Public. Returns `{ "data": { "averageRating": 4.5, "reviewCount": 12 } }`.
+
+### `GET /api/v1/reviews/mine?dealId=<uuid>`
+
+Authenticated. Returns the caller's review for a deal, or `null`.
+
 ### Admin dashboard endpoints
 
 All endpoints below require the `ADMIN` role. Every mutation writes an

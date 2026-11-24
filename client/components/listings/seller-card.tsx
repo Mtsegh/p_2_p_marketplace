@@ -1,14 +1,23 @@
+"use client";
+
+import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button";
 import { displayNameOf, initialsForUser } from "@/lib/profile-display";
 import type { PublicProfile } from "@/lib/profiles-api";
+import { fetchTrustStats } from "@/lib/reviews-api";
 
 /**
  * Seller trust card on the listing detail page. Shows only what the public
- * profile API exposes — never an email address — plus the two verification
- * badges that signal a trustworthy member.
+ * profile API exposes — never an email address — plus the verification and
+ * review badges that signal a trustworthy member.
  */
 export function SellerCard({ profile }: { profile: PublicProfile }) {
+  const trust = useQuery({
+    queryKey: ["trust", profile.id],
+    queryFn: () => fetchTrustStats(profile.id),
+  });
+
   return (
     <section
       aria-labelledby="seller-heading"
@@ -43,6 +52,11 @@ export function SellerCard({ profile }: { profile: PublicProfile }) {
         ) : (
           <Badge tone="outline">Phone not verified</Badge>
         )}
+        {trust.data && trust.data.reviewCount > 0 ? (
+          <Badge tone="info">
+            ★ {trust.data.averageRating.toFixed(1)} ({trust.data.reviewCount})
+          </Badge>
+        ) : null}
       </div>
 
       <p className="mt-4 text-xs text-muted">
