@@ -25,13 +25,19 @@ import {
   RESOLUTION_LABELS,
   type Dispute,
 } from "@/lib/disputes-api";
+import {
+  fetchReports,
+  resolveReport,
+  type Report,
+} from "@/lib/reports-api";
 
-type Tab = "users" | "listings" | "disputes" | "settings" | "audit";
+type Tab = "users" | "listings" | "disputes" | "reports" | "settings" | "audit";
 
 const TABS: Array<{ key: Tab; label: string }> = [
   { key: "users", label: "Users" },
   { key: "listings", label: "Listings" },
   { key: "disputes", label: "Disputes" },
+  { key: "reports", label: "Reports" },
   { key: "settings", label: "Settings" },
   { key: "audit", label: "Audit log" },
 ];
@@ -456,6 +462,119 @@ function DisputesPanel() {
   );
 }
 
+function ReportsPanel() {
+  const queryClient = useQueryClient();
+  const query = useQuery({ queryKey: ["admin", "reports"], queryFn: fetchReports });
+  const [selected, setSelected] = useState<Report | null>(null);
+  const [note, setNote] = useState("");
+  const [suspend, setSuspend] = useState(true);
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      resolveReport(selected!.id, {
+        action: "actioned",
+        note: note || undefined,
+        suspendUser: suspend,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "reports"] });
+      setSelected(null);
+      setNote("");
+    },
+  });
+
+  const dismiss = useMutation({
+    mutationFn: (report: Report) =>
+      resolveReport(report.id, { action: "dismissed", note: note || undefined }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["admin", "reports"] }),
+  });
+
+  if (query.isLoading) return <p className="text-muted">Loading reports…</p>;
+
+  const reports = query.data ?? [];
+  const open = reports.filter((report) => report.status === "OPEN");
+
+  return (
+    <div className="flex flex-col gap-4">
+      {mutation.isError || dismiss.isError ? (
+        <Alert tone="danger" title="Could not resolve the report">
+          Try again.
+        </Alert>
+      ) : null}
+      {open.length === 0 ? (
+        <EmptyState title="No open reports" description="The queue is clear." />
+      ) : null}
+      <ul className="flex flex-col gap-3">
+        {open.map((report) => (
+          <li
+            key={report.id}
+            className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-line bg-surface p-4"
+          >
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium">
+                {report.targetType}: {report.targetId}
+              </p>
+              <p className="mt-1 whitespace-pre-line text-sm text-muted">
+                {report.reason}
+              </p>
+              <p className="mt-1 text-xs text-muted">
+                Reported by {report.reporterId} ·{" "}
+                {new Date(report.createdAt).toLocaleString("en-US")}
+              </p>
+            </div>
+            <div className="w-full sm:w-56">
+              {selected?.id === report.id ? (
+                <div className="flex flex-col gap-2">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={suspend}
+                      onChange={(event) => setSuspend(event.target.checked)}
+                    />
+                    Take action on target
+                  </label>
+                  <TextField
+                    label="Note (optional)"
+                    value={note}
+                    onChange={(event) => setNote(event.target.value)}
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      variant="danger"
+                      loading={mutation.isPending}
+                      disabled={mutation.isPending}
+                      onClick={() => mutation.mutate()}
+                    >
+                      Action
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      loading={dismiss.isPending}
+                      disabled={dismiss.isPending}
+                      onClick={() => dismiss.mutate(report)}
+                    >
+                      Dismiss
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setSelected(null)}>
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <Button size="sm" variant="secondary" onClick={() => setSelected(report)}>
+                  Review
+                </Button>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function AdminDashboard() {
   const { user } = useAuth();
   const [tab, setTab] = useState<Tab>("users");
@@ -493,6 +612,7 @@ export function AdminDashboard() {
       {tab === "users" ? <UsersPanel /> : null}
       {tab === "listings" ? <ListingsPanel /> : null}
       {tab === "disputes" ? <DisputesPanel /> : null}
+      {tab === "reports" ? <ReportsPanel /> : null}
       {tab === "settings" ? <SettingsPanel /> : null}
       {tab === "audit" ? <AuditPanel /> : null}
     </div>

@@ -127,6 +127,10 @@ model User {
   authoredReviews Review[] @relation("AuthoredReviews")
   /// Reviews received by this user.
   receivedReviews Review[] @relation("ReceivedReviews")
+  /// Reports filed by this user.
+  filedReports   Report[] @relation("ReportedBy")
+  /// Reports resolved by this admin.
+  resolvedReports Report[] @relation("ResolvedReports")
 
   @@map("users")
 }
@@ -229,6 +233,33 @@ model DealHistory {
 
   @@index([dealId])
   @@map("deal_history")
+}
+
+enum ReportStatus {
+  OPEN
+  ACTIONED
+  DISMISSED
+}
+
+/// A user-reported listing or member. Reviewed by admins in the moderation queue.
+model Report {
+  id          String       @id @default(uuid()) @db.Uuid
+  reporterId  String       @map("reporter_id") @db.Uuid
+  targetType  String       @map("target_type") @db.VarChar(20) // "listing" | "user"
+  targetId    String       @map("target_id") @db.Uuid
+  reason      String       @map("reason") @db.Text
+  status      ReportStatus @default(OPEN) @map("status")
+  note        String?      @map("note") @db.Text
+  resolvedById String?     @map("resolved_by_id") @db.Uuid
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  resolvedAt  DateTime?    @map("resolved_at") @db.Timestamptz(3)
+
+  reporter  User  @relation("ReportedBy", fields: [reporterId], references: [id], onDelete: Cascade)
+  resolvedBy User? @relation("ResolvedReports", fields: [resolvedById], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([targetType, targetId])
+  @@map("reports")
 }
 
 enum DisputeStatus {

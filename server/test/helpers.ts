@@ -24,7 +24,7 @@ export { clearSmsOutbox, readSmsOutbox };
  */
 export async function resetIdentityState(): Promise<void> {
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "reviews", "platform_settings", "dispute_evidence", "disputes", "notification_events", "ledger_entries", "webhook_events", "transactions", "deal_messages", "deal_offered_listings", "deal_history", "deals", "auth_tokens", "sessions", "users", "listings", "listing_images", "categories" RESTART IDENTITY CASCADE',
+    'TRUNCATE TABLE "reports", "reviews", "platform_settings", "dispute_evidence", "disputes", "notification_events", "ledger_entries", "webhook_events", "transactions", "deal_messages", "deal_offered_listings", "deal_history", "deals", "auth_tokens", "sessions", "users", "listings", "listing_images", "categories" RESTART IDENTITY CASCADE',
   );
   await ensureRedisConnected();
   await redis.flushdb();
