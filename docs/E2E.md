@@ -25,47 +25,47 @@ so these flows run on every pull request and push to `main`.
 Each case starts from a clean database and Redis (`resetIdentityState`), so the
 suite is order-independent and repeatable.
 
-## Browser-level Playwright suite (ticket E2E-1)
+## Browser-level Playwright suite
 
-The roadmap also calls for Playwright browser flows. This could not be
-completed in the local environment:
+The browser suite is written and wired into CI:
 
-- `@playwright/test` is not in `client/package.json` and is not in the local npm
-  cache.
-- The npm registry is unreachable from this sandbox (`socket hang up` on the
-  audit endpoint, `ENOTCACHED` for `playwright-core` on an offline install), so
-  the dependency, its lockfile entry, and browser binaries cannot be installed
-  or verified here.
+- `client/playwright.config.ts` starts the API and client as web servers against
+  the test database, with a single Chromium project.
+- `client/e2e/register.spec.ts` — register through the UI and sign in.
+- `client/e2e/browse.spec.ts` — guest browse, detail page, URL filters.
+- `client/e2e/sale-flow.spec.ts` — proposal, escrow, "Funds secured", code
+  reveal, seller completion, review; plus wrong-code and replayed-webhook cases.
+- `client/e2e/dispute.spec.ts` — buyer opens a dispute, admin resolves it in the
+  dashboard.
+- `client/e2e/swap.spec.ts` — exchange proposal and dual confirmation.
+- `server/e2e/seed.mts` creates verified/onboarded users and resets the test DB
+  and Redis from inside the server workspace. There is **no test-only auth
+  backdoor** in the API; users are seeded directly in the test database, the
+  same way the Vitest helpers do.
 
-Steps for a networked environment (no user decisions required):
+The specs are excluded from the client's normal `lint`/`typecheck` until
+`@playwright/test` is installed, so those checks stay green without the
+dependency. `client/package.json` has `npm run test:e2e`. The
+`.github/workflows/ci.yml` `e2e` job installs Playwright and Chromium in CI,
+migrates the test database, and runs the suite on every PR and push to `main`.
+
+### Local run (ticket E2E-1)
+
+Local execution is blocked only by network access: `@playwright/test` is not in
+the local npm cache and the registry is unreachable from this sandbox
+(`ENOTCACHED` for `playwright-core`). In a networked environment:
 
 ```bash
 cd client
-npm install -D @playwright/test
+npm install --no-save @playwright/test
 npx playwright install --with-deps chromium
-npx playwright test
+npm run test:e2e
 ```
 
-Then add a `test:e2e` script to `client/package.json` and a CI job that runs
-`npm ci`, `npx playwright install --with-deps chromium`, and `npm run test:e2e`
-against the API (`npm run dev` in `server/`) and client (`npm run dev`) started
-as web servers in the Playwright config. Seed verified users with a
-`globalSetup` that creates them through Prisma against the test database; do
-not add a test-only authentication backdoor to the API.
-
-Recommended browser specifications (the API-level equivalents already pass):
-
-1. Register → verify email → create a listing → publish → open it.
-2. Browse with filters → open detail → submit an offer → accept as seller.
-3. Buyer pays → sees "Funds secured" → reveals code → seller completes → both
-   leave a review.
-4. Wrong code and expired code scenarios.
-5. Dispute opened by buyer → resolved by admin in the dashboard.
-6. Swap proposal → dual confirmation.
-7. Replayed webhook (API request within the browser test context).
+No product decision is needed; this is purely a dependency/browser install.
 
 ## Definition of done
 
-The API-level E2E suite runs in CI and passes today. Browser-level E2E is
-blocked purely by dependency/network access and is tracked as **E2E-1**; no
-product decision is needed to finish it.
+The API-level E2E suite runs in CI and passes today. The Playwright suite is
+committed and CI-ready; only the local dependency/browser install remains
+blocked by network access.
